@@ -53,8 +53,21 @@ func (r *InMemoryLedger) GetAccount(ctx context.Context, id domain.AccountID) (d
 }
 
 func (r *InMemoryLedger) SaveTransaction(ctx context.Context, tx domain.Transaction) error {
+	if err := tx.Validate(); err != nil {
+		return err
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
+	for _, entry := range tx.Entries {
+		account, ok := r.accounts[entry.AccountID]
+		if !ok {
+			return fmt.Errorf("account not found: %s", entry.AccountID)
+		}
+		if account.Status != domain.AccountActive || account.Currency != entry.Currency {
+			return fmt.Errorf("account is inactive or currency does not match: %s", entry.AccountID)
+		}
+	}
 
 	if existing, ok := r.idempotency[tx.IdempotencyKey]; ok {
 		return fmt.Errorf("idempotency key already used: %s", existing)

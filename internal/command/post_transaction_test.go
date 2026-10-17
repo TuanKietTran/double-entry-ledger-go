@@ -12,6 +12,15 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+func provisionAccounts(t *testing.T, repo *repository.InMemoryLedger, currency string, ids ...uuid.UUID) {
+	t.Helper()
+	for _, id := range ids {
+		if err := repo.CreateAccount(context.Background(), domain.Account{ID: id, Currency: currency, Type: domain.Asset, Status: domain.AccountActive}); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func TestPostTransactionHandler_BalancedPostUpdatesBalances(t *testing.T) {
 	repo := repository.NewInMemoryLedger()
 	post := NewPostTransactionHandler(repo)
@@ -19,6 +28,7 @@ func TestPostTransactionHandler_BalancedPostUpdatesBalances(t *testing.T) {
 
 	cash := uuid.New()
 	revenue := uuid.New()
+	provisionAccounts(t, repo, "USD", cash, revenue)
 	ctx := context.Background()
 
 	first, err := post.Handle(ctx, PostTransactionCommand{
@@ -82,11 +92,13 @@ func TestPostTransactionHandler_RejectsUnbalanced(t *testing.T) {
 	bal := query.NewGetBalanceHandler(repo)
 
 	account := uuid.New()
+	other := uuid.New()
+	provisionAccounts(t, repo, "USD", account, other)
 	_, err := post.Handle(context.Background(), PostTransactionCommand{
 		IdempotencyKey: "bad-1",
 		Entries: []EntryInput{
 			{AccountID: account, Amount: decimal.NewFromInt(10), Direction: domain.Debit, Currency: "USD"},
-			{AccountID: uuid.New(), Amount: decimal.NewFromInt(9), Direction: domain.Credit, Currency: "USD"},
+			{AccountID: other, Amount: decimal.NewFromInt(9), Direction: domain.Credit, Currency: "USD"},
 		},
 	})
 	if err == nil || !strings.Contains(err.Error(), "not balanced") {
@@ -107,6 +119,7 @@ func TestPostTransactionHandler_IdempotencyKey(t *testing.T) {
 	post := NewPostTransactionHandler(repo)
 	account := uuid.New()
 	other := uuid.New()
+	provisionAccounts(t, repo, "EUR", account, other)
 	cmd := PostTransactionCommand{
 		IdempotencyKey: "same-key",
 		Entries: []EntryInput{

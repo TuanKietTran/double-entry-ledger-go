@@ -8,6 +8,25 @@ info:
 servers:
   - url: http://localhost:8101
 paths:
+  /v1/accounts:
+    post:
+      operationId: createAccount
+      summary: Explicitly provision an account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [account_id, currency, type]
+              properties:
+                account_id: { type: string, format: uuid }
+                owner_id: { type: string }
+                currency: { type: string, pattern: '^[A-Z]{3}$' }
+                type: { type: string, enum: [ASSET, LIABILITY, EQUITY, REVENUE, EXPENSE] }
+      responses:
+        '201': { description: Account created or identical account already exists }
+        '400': { description: Invalid account attributes or ID conflict }
   /v1/transactions:
     post:
       operationId: postTransaction
@@ -60,7 +79,6 @@ paths:
 x-planned-capabilities:
   description: Not implemented in this API version; these routes are roadmap only.
   items:
-    - POST /v1/accounts
     - GET /v1/accounts/{id}/entries
     - GET /v1/accounts/{id}/balance?as_of={timestamp}
     - GET /v1/trial-balance

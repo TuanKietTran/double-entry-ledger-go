@@ -14,13 +14,14 @@ import (
 
 // Compile-time checks that both stores satisfy the command/query port.
 var (
-	_ LedgerRepository = (*PostgresLedger)(nil)
-	_ LedgerRepository = (*InMemoryLedger)(nil)
+	_ LedgerRepository  = (*PostgresLedger)(nil)
+	_ LedgerRepository  = (*InMemoryLedger)(nil)
+	_ AccountRepository = (*PostgresLedger)(nil)
+	_ AccountRepository = (*InMemoryLedger)(nil)
 )
 
 // PostgresLedger persists transactions against migrations/001_init.sql.
-// Accounts referenced by entries are inserted if missing so the existing
-// post-transaction API can run without a separate create-account call.
+// Accounts must be explicitly provisioned before a transaction can reference them.
 type PostgresLedger struct {
 	pool *pgxpool.Pool
 }
@@ -41,7 +42,46 @@ func (r *PostgresLedger) Close() {
 	r.pool.Close()
 }
 
+func (r *PostgresLedger) CreateAccount(ctx context.Context, account domain.Account) error {
+	if err := account.Validate(); err != nil {
+		return err
+	}
+	_, err := r.pool.Exec(ctx, `
+		INSERT INTO accounts (id, owner_id, currency, type, status)
+		VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (id) DO NOTHING
+	`, account.ID, account.OwnerID, account.Currency, string(account.Type), string(account.Status))
+	if err != nil {
+		return err
+	}
+	existing, err := r.GetAccount(ctx, account.ID)
+	if err != nil {
+		return err
+	}
+	if existing != account {
+		return fmt.Errorf("account already exists with different attributes")
+	}
+	return nil
+}
+
+func (r *PostgresLedger) GetAccount(ctx context.Context, id domain.AccountID) (domain.Account, error) {
+	var account domain.Account
+	var accountType, status string
+	err := r.pool.QueryRow(ctx, `
+		SELECT id, owner_id, currency, type, status FROM accounts WHERE id = $1
+	`, id).Scan(&account.ID, &account.OwnerID, &account.Currency, &accountType, &status)
+	if err != nil {
+		return domain.Account{}, err
+	}
+	account.Type = domain.AccountType(accountType)
+	account.Status = domain.AccountStatus(status)
+	return account, nil
+}
+
 func (r *PostgresLedger) SaveTransaction(ctx context.Context, tx domain.Transaction) error {
+	if err := tx.Validate(); err != nil {
+		return err
+	}
 	dbTx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -69,14 +109,13 @@ func (r *PostgresLedger) SaveTransaction(ctx context.Context, tx domain.Transact
 	}
 
 	for _, e := range tx.Entries {
-		if _, err := dbTx.Exec(ctx, `
-			INSERT INTO accounts (id, owner_id, currency, type, status)
-			VALUES ($1, $2, $3, 'ASSET', 'ACTIVE')
-			ON CONFLICT (id) DO NOTHING
-		`, e.AccountID, "unspecified", e.Currency); err != nil {
-			return err
+		var currency, status string
+		if err := dbTx.QueryRow(ctx, `SELECT currency, status FROM accounts WHERE id = $1 FOR UPDATE`, e.AccountID).Scan(&currency, &status); err != nil {
+			return fmt.Errorf("account not found: %s: %w", e.AccountID, err)
 		}
-
+		if status != string(domain.AccountActive) || currency != e.Currency {
+			return fmt.Errorf("account is inactive or currency does not match: %s", e.AccountID)
+		}
 		if _, err := dbTx.Exec(ctx, `
 			INSERT INTO entries (id, transaction_id, account_id, amount, direction, currency)
 			VALUES ($1, $2, $3, $4, $5, $6)

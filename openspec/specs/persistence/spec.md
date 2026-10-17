@@ -29,11 +29,16 @@ The system SHALL use Postgres when `DATABASE_URL` is set, and SHALL apply the sa
 - **THEN** the store rejects it with `idempotency key already used` and the original transaction id
 - **AND** the account still has only the first post's entries
 
-### Requirement: Missing account row
-The system SHALL create an account row that a post refers to when that row does not exist, so the post is not rejected for a missing account.
+### Requirement: Accounts are provisioned explicitly
+The system SHALL require account records to exist before a post references them. A rejected post SHALL NOT create accounts or journal rows as a side effect.
 
-#### Scenario: First post for an account id
-- **GIVEN** the Postgres `accounts` table has no row for account A
+#### Scenario: Missing account is rejected
+- **GIVEN** the store has no row for account A
 - **WHEN** a balanced post includes A
+- **THEN** the post is rejected
+- **AND** no account or entry is created
+
+#### Scenario: Provision before first post
+- **GIVEN** account A has been explicitly provisioned with a currency and type
+- **WHEN** a balanced post references A using its provisioned currency
 - **THEN** the post succeeds
-- **AND** a later balance read for A reflects the entry

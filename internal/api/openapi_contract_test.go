@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/TuanKietTran/double-entry-ledger-go/internal/command"
+	"github.com/TuanKietTran/double-entry-ledger-go/internal/repository"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -16,11 +18,14 @@ func TestOpenAPIListsCurrentRoutesAndStatuses(t *testing.T) {
 	}
 	text := string(spec)
 	routes := map[string]string{
+		"POST /accounts":             "  /v1/accounts:\n    post:",
 		"POST /transactions":         "  /v1/transactions:\n    post:",
 		"GET /accounts/{id}/balance": "  /v1/accounts/{id}/balance:\n    get:",
 	}
 	registered := map[string]bool{}
-	if err := chi.Walk(NewHandlers(nil, nil).Routes(), func(method string, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
+	mem := repository.NewInMemoryLedger()
+	handlers := NewHandlers(nil, nil, command.NewCreateAccountHandler(mem))
+	if err := chi.Walk(handlers.Routes(), func(method string, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
 		registered[method+" "+route] = true
 		return nil
 	}); err != nil {
@@ -34,12 +39,12 @@ func TestOpenAPIListsCurrentRoutesAndStatuses(t *testing.T) {
 			t.Errorf("OpenAPI missing route: %s", route)
 		}
 	}
-	for _, status := range []string{"'200':", "'400':", "'500':"} {
+	for _, status := range []string{"'200':", "'201':", "'400':", "'500':"} {
 		if !strings.Contains(text, status) {
 			t.Errorf("OpenAPI missing implemented status %s", status)
 		}
 	}
-	for _, planned := range []string{"POST /v1/accounts", "GET /v1/accounts/{id}/entries", "POST /v1/transactions/{id}/reversals"} {
+	for _, planned := range []string{"GET /v1/accounts/{id}/entries", "POST /v1/transactions/{id}/reversals"} {
 		if strings.Contains(text, "\n  "+planned) {
 			t.Errorf("planned-only route must not be an OpenAPI path: %s", planned)
 		}

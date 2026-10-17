@@ -28,3 +28,12 @@ A write key SHALL bind to a canonical payload. Repeating the same key and payloa
 
 ### Requirement: Memory and Postgres parity
 Memory and Postgres adapters SHALL implement the same account, transaction, idempotency, conflict, and query semantics, with atomic writes.
+
+### Requirement: Explicit account provisioning
+Clients SHALL provision accounts through `POST /v1/accounts` before posting to them. Repeating the identical account identity and immutable attributes SHALL succeed without creating a duplicate; reusing an identity with different owner, currency, type, or status SHALL conflict. Posting SHALL NOT create missing account rows as a side effect.
+
+#### Scenario: Replace legacy implicit provisioning
+- **GIVEN** a transaction references an account that has not been explicitly provisioned
+- **WHEN** the transaction is posted
+- **THEN** the post is rejected without creating an account or transaction
+- **AND** clients can provision the account explicitly and retry the post.

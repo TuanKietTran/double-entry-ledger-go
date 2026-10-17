@@ -14,6 +14,7 @@ import (
 
 	"github.com/TuanKietTran/double-entry-ledger-go/internal/api"
 	"github.com/TuanKietTran/double-entry-ledger-go/internal/command"
+	"github.com/TuanKietTran/double-entry-ledger-go/internal/domain"
 	"github.com/TuanKietTran/double-entry-ledger-go/internal/query"
 	"github.com/TuanKietTran/double-entry-ledger-go/internal/repository"
 	"github.com/go-chi/chi/v5"
@@ -50,6 +51,11 @@ func TestThousandPerMinuteAndPlayback(t *testing.T) {
 
 	cash := uuid.New()
 	other := uuid.New()
+	for _, id := range []uuid.UUID{cash, other} {
+		if err := repo.CreateAccount(context.Background(), domain.Account{ID: id, Currency: "USD", Type: domain.Asset, Status: domain.AccountActive}); err != nil {
+			t.Fatal(err)
+		}
+	}
 	calls := make([]Call, RequestsPerMinute)
 	for i := range calls {
 		calls[i] = Call{

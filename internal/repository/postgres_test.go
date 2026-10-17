@@ -39,6 +39,11 @@ func TestPostgresLedger(t *testing.T) {
 	t.Run("balance and entries", func(t *testing.T) {
 		cash := uuid.New()
 		revenue := uuid.New()
+		for _, id := range []uuid.UUID{cash, revenue} {
+			if err := repo.CreateAccount(ctx, domain.Account{ID: id, OwnerID: "fixture", Currency: "USD", Type: domain.Asset, Status: domain.AccountActive}); err != nil {
+				t.Fatal(err)
+			}
+		}
 		tx := domain.Transaction{
 			ID:             uuid.New(),
 			IdempotencyKey: "pg-fund-1",
@@ -93,6 +98,11 @@ func TestPostgresLedger(t *testing.T) {
 	t.Run("idempotency does not double post", func(t *testing.T) {
 		account := uuid.New()
 		other := uuid.New()
+		for _, id := range []uuid.UUID{account, other} {
+			if err := repo.CreateAccount(ctx, domain.Account{ID: id, OwnerID: "fixture", Currency: "EUR", Type: domain.Asset, Status: domain.AccountActive}); err != nil {
+				t.Fatal(err)
+			}
+		}
 		tx := domain.Transaction{
 			ID:             uuid.New(),
 			IdempotencyKey: "pg-same-key",
@@ -130,6 +140,44 @@ func TestPostgresLedger(t *testing.T) {
 		}
 		if !bal.Equal(decimal.NewFromInt(5)) || cur != "EUR" {
 			t.Fatalf("balance = %s %s", bal, cur)
+		}
+	})
+
+	t.Run("explicit account provisioning is idempotent and immutable", func(t *testing.T) {
+		account := domain.Account{ID: uuid.New(), OwnerID: "fixture", Currency: "USD", Type: domain.Asset, Status: domain.AccountActive}
+		if err := repo.CreateAccount(ctx, account); err != nil {
+			t.Fatal(err)
+		}
+		if err := repo.CreateAccount(ctx, account); err != nil {
+			t.Fatalf("same account retry: %v", err)
+		}
+		got, err := repo.GetAccount(ctx, account.ID)
+		if err != nil || got != account {
+			t.Fatalf("GetAccount() = %+v, %v; want %+v", got, err, account)
+		}
+		changed := account
+		changed.Currency = "EUR"
+		if err := repo.CreateAccount(ctx, changed); err == nil {
+			t.Fatal("changed account attributes unexpectedly accepted")
+		}
+	})
+
+	t.Run("posting does not auto-create an account", func(t *testing.T) {
+		account, other := uuid.New(), uuid.New()
+		tx := domain.Transaction{ID: uuid.New(), IdempotencyKey: "missing-account", Status: "POSTED", Entries: []domain.Entry{
+			{ID: uuid.New(), AccountID: account, Amount: decimal.NewFromInt(1), Direction: domain.Debit, Currency: "USD"},
+			{ID: uuid.New(), AccountID: other, Amount: decimal.NewFromInt(1), Direction: domain.Credit, Currency: "USD"},
+		}}
+		tx.Entries[0].TransactionID, tx.Entries[1].TransactionID = tx.ID, tx.ID
+		if err := repo.SaveTransaction(ctx, tx); err == nil {
+			t.Fatal("post with unprovisioned accounts unexpectedly succeeded")
+		}
+		if _, err := repo.GetAccount(ctx, account); err == nil {
+			t.Fatal("post implicitly created an account")
+		}
+		entries, err := repo.GetEntries(ctx, account)
+		if err != nil || len(entries) != 0 {
+			t.Fatalf("unexpected entries after rejected post: %v %v", entries, err)
 		}
 	})
 

@@ -20,7 +20,12 @@ func main() {
 
 	postH := command.NewPostTransactionHandler(repo)
 	balH := query.NewGetBalanceHandler(repo)
-	handlers := api.NewHandlers(postH, balH)
+	accountRepo, ok := repo.(repository.AccountRepository)
+	if !ok {
+		log.Fatal("ledger repository does not support account provisioning")
+	}
+	createAccountH := command.NewCreateAccountHandler(accountRepo)
+	handlers := api.NewHandlers(postH, balH, createAccountH)
 
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
