@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/TuanKietTran/double-entry-ledger-go/internal/domain"
 	"github.com/TuanKietTran/double-entry-ledger-go/internal/query"
@@ -178,6 +179,15 @@ func (e errRepo) GetBalance(context.Context, domain.AccountID) (decimal.Decimal,
 	return decimal.Zero, "", e.err
 }
 func (e errRepo) GetEntries(context.Context, domain.AccountID) ([]domain.Entry, error) {
+	return nil, e.err
+}
+func (e errRepo) GetEntriesPage(context.Context, domain.AccountID, int, int) ([]domain.Entry, error) {
+	return nil, e.err
+}
+func (e errRepo) GetBalanceAsOf(context.Context, domain.AccountID, time.Time) (decimal.Decimal, string, error) {
+	return decimal.Zero, "", e.err
+}
+func (e errRepo) GetTrialBalance(context.Context) ([]repository.AccountBalance, error) {
 	return nil, e.err
 }
 
