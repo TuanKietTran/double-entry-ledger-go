@@ -6,7 +6,6 @@ import (
 	"sync"
 
 	"github.com/example/double-entry-ledger/internal/domain"
-	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 )
 
