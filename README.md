@@ -52,7 +52,7 @@ Current routes: account provision/read, transaction post/lookup by ID or idempot
 
 ## Measured status
 
-Evidence from `go test -p 2 ./... -race -count=1 -cover` on 2026-10-18 in this Go environment: API 80.8%, command 94.4%, domain 93.7%, playback 63.5%, query 100.0%, repository 83.5%, cmd 43.1%. The repository package reports pass, but the embedded Postgres test explicitly skips when run as root; PostgreSQL parity was not verified in this environment. These package percentages are not an aggregate; weighted internal coverage was measured at 84.0% with `-coverpkg=./internal/...`.
+Evidence from `go test -p 2 ./... -race -count=1 -cover` on 2026-10-18 in this Go environment: API 80.8%, command 94.4%, domain 93.7%, playback 63.5%, query 100.0%, repository 83.5%, cmd 43.1%. `TestPostgresLedger` (embedded Postgres, seven subtests) was run natively on Windows with `go test -p 2 ./internal/repository -run TestPostgresLedger -race -count=1 -v` and passed (28.03s, 2026-10-18; log in the control folder under `logs/ledger/pg-worker-run.txt`). The test skips only when the process runs as root (`os.Geteuid()==0`), which does not apply to that run. Simultaneous multi-connection DB conflicts remain unverified. These package percentages are not an aggregate; weighted internal coverage was measured at 84.0% with `-coverpkg=./internal/...`.
 
 ## Design decisions
 
