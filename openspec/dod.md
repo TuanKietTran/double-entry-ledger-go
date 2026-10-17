@@ -7,9 +7,9 @@ A **Met** row names executable evidence. This checkpoint measures repository/tes
 | Requirement | Evidence |
 |---|---|
 | Exact positive balanced single-currency journals, strict directions, explicit accounts | `go test -p 2 ./... -race -count=1 -cover`; domain package coverage 93.7%; account/domain/repository invariant tests |
-| Payload-bound idempotent posting and append-only full reversal | command/API/repository reversal and idempotency tests; embedded Postgres suite passed |
+| Payload-bound idempotent posting and append-only full reversal | command/API and in-memory repository tests; embedded Postgres adapter test skipped as root, so SQL behavior is unverified |
 | Account versions and query interfaces (lookup, entries, as-of balance, trial balance) | API/query/repository tests in full race suite |
-| Memory/Postgres implementation | repository tests use in-memory and embedded Postgres; full suite passed |
+| Memory repository implementation | repository tests exercise the in-memory adapter in the full race suite |
 | HTTP routes and statuses contract parsed and checked against registrations | `TestOpenAPIListsCurrentRoutesAndStatuses` parses YAML and checks exact route set and required statuses |
 | Operational endpoints and bounded server configuration | `cmd/server` tests; full race suite |
 | Domain >=90%, weighted non-cmd/internal >=80% | domain 93.7%; weighted internal 84.0%, measured in card 5d with `-coverpkg=./internal/...` |
@@ -20,7 +20,7 @@ A **Met** row names executable evidence. This checkpoint measures repository/tes
 |---|---|
 | Overall runtime resilience | Health/readiness/metrics, request IDs, body limits and graceful shutdown exist; no downstream clients/outbox/retry circuit breaker are needed or implemented because ledger consumes no service. Real-process smoke and shutdown probe were not run. |
 | Contract validation | YAML syntax, route set and required statuses are tested; all OpenAPI schema semantics and every error/result body shape are not exhaustively validated. |
-| PostgreSQL concurrency | Atomicity and stale version behavior tested; simultaneous conflicting DB-client reversal/idempotency races are not separately stress-tested. |
+| PostgreSQL parity/concurrency | Embedded Postgres test skips when process is root (`embedded Postgres cannot initdb as root`); SQL parity and DB concurrency remain unverified here. |
 | Operations portability | CI workflow is authored but not run; Docker unavailable; Linux/macOS unverified. |
 
 ## Unmet / not claimed

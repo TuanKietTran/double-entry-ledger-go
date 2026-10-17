@@ -52,7 +52,7 @@ Current routes: account provision/read, transaction post/lookup by ID or idempot
 
 ## Measured status
 
-Evidence from `go test -p 2 ./... -race -count=1 -cover` on 2026-10-18 in this Go environment: API 80.8%, command 94.4%, domain 93.7%, playback 63.5%, query 100.0%, repository 83.5%, cmd 43.1%. Full test suite including embedded Postgres passed. These package percentages are not an aggregate; weighted internal coverage was separately measured at 84.0% in card 5d using `-coverpkg=./internal/...`.
+Evidence from `go test -p 2 ./... -race -count=1 -cover` on 2026-10-18 in this Go environment: API 80.8%, command 94.4%, domain 93.7%, playback 63.5%, query 100.0%, repository 83.5%, cmd 43.1%. The repository package reports pass, but the embedded Postgres test explicitly skips when run as root; PostgreSQL parity was not verified in this environment. These package percentages are not an aggregate; weighted internal coverage was measured at 84.0% with `-coverpkg=./internal/...`.
 
 ## Design decisions
 
