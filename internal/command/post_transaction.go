@@ -56,5 +56,9 @@ func (h *PostTransactionHandler) Handle(ctx context.Context, cmd PostTransaction
 	if err := h.repo.SaveTransaction(ctx, tx); err != nil {
 		return uuid.Nil, err
 	}
-	return tx.ID, nil
+	stored, err := h.repo.GetTransactionByIdempotencyKey(ctx, tx.IdempotencyKey)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	return stored.ID, nil
 }

@@ -31,7 +31,7 @@ paths:
     post:
       operationId: postTransaction
       summary: Record a balanced transaction
-      description: Legacy behavior: duplicate idempotency keys and validation errors return HTTP 400.
+      A same-key, same-payload retry returns the original transaction; changed payload conflicts with HTTP 409.
       requestBody:
         required: true
         content:
@@ -62,7 +62,8 @@ paths:
                 required: [transaction_id]
                 properties:
                   transaction_id: { type: string, format: uuid }
-        '400': { description: Invalid JSON, account id, unbalanced post, or reused idempotency key }
+        '400': { description: Invalid JSON, account id, direction, or journal invariants }
+        '409': { description: Idempotency key was already used with a different payload }
   /v1/transactions/{id}:
     get:
       operationId: getTransactionByID

@@ -2,6 +2,7 @@ package domain
 
 import (
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -77,12 +78,47 @@ type Transaction struct {
 	Status         string
 }
 
+func (t *Transaction) SamePayload(other Transaction) bool {
+	if t.IdempotencyKey != other.IdempotencyKey || t.Description != other.Description || len(t.Entries) != len(other.Entries) {
+		return false
+	}
+	left := append([]Entry(nil), t.Entries...)
+	right := append([]Entry(nil), other.Entries...)
+	less := func(entries []Entry) func(int, int) bool {
+		return func(i, j int) bool {
+			a, b := entries[i], entries[j]
+			if a.AccountID != b.AccountID {
+				return a.AccountID.String() < b.AccountID.String()
+			}
+			if a.Direction != b.Direction {
+				return a.Direction < b.Direction
+			}
+			if a.Currency != b.Currency {
+				return a.Currency < b.Currency
+			}
+			return a.Amount.LessThan(b.Amount)
+		}
+	}
+	sort.Slice(left, less(left))
+	sort.Slice(right, less(right))
+	for i, entry := range left {
+		candidate := right[i]
+		if entry.AccountID != candidate.AccountID || !entry.Amount.Equal(candidate.Amount) || entry.Direction != candidate.Direction || entry.Currency != candidate.Currency {
+			return false
+		}
+	}
+	return true
+}
+
 func (t *Transaction) IsBalanced() bool {
 	return t.Validate() == nil
 }
 
 // Validate enforces journal invariants without performing I/O.
 func (t *Transaction) Validate() error {
+	if t.IdempotencyKey == "" {
+		return fmt.Errorf("idempotency key is required")
+	}
 	if len(t.Entries) < 2 {
 		return fmt.Errorf("transaction requires at least two entries")
 	}

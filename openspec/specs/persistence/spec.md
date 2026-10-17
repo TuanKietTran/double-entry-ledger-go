@@ -23,11 +23,13 @@ The system SHALL use Postgres when `DATABASE_URL` is set, and SHALL apply the sa
 - **WHEN** a client posts a balanced transaction
 - **THEN** a later balance read through a new connection returns that post's effect
 
-#### Scenario: Duplicate key does not double post
-- **GIVEN** the Postgres store already holds a post for an idempotency key
-- **WHEN** a second post uses that key
-- **THEN** the store rejects it with `idempotency key already used` and the original transaction id
+#### Scenario: Duplicate key is payload-bound
+- **GIVEN** the store already holds a post for an idempotency key
+- **WHEN** a second post uses that key with the same payload
+- **THEN** the store returns the original transaction id without another effect
 - **AND** the account still has only the first post's entries
+- **WHEN** the key is reused with a different payload
+- **THEN** the store reports an idempotency conflict
 
 ### Requirement: Accounts are provisioned explicitly
 The system SHALL require account records to exist before a post references them. A rejected post SHALL NOT create accounts or journal rows as a side effect.

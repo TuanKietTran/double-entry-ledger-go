@@ -72,7 +72,11 @@ func (r *InMemoryLedger) SaveTransaction(ctx context.Context, tx domain.Transact
 	}
 
 	if existing, ok := r.idempotency[tx.IdempotencyKey]; ok {
-		return fmt.Errorf("idempotency key already used: %s", existing)
+		stored := r.transactions[existing]
+		if stored.SamePayload(tx) {
+			return nil
+		}
+		return fmt.Errorf("%w: %s", ErrIdempotencyConflict, existing)
 	}
 
 	r.transactions[tx.ID] = tx

@@ -44,7 +44,7 @@ func TestOpenAPIListsCurrentRoutesAndStatuses(t *testing.T) {
 			t.Errorf("OpenAPI missing route: %s", route)
 		}
 	}
-	for _, status := range []string{"'200':", "'201':", "'400':", "'404':", "'500':"} {
+	for _, status := range []string{"'200':", "'201':", "'400':", "'404':", "'409':", "'500':"} {
 		if !strings.Contains(text, status) {
 			t.Errorf("OpenAPI missing implemented status %s", status)
 		}

@@ -77,7 +77,7 @@ func TestTransactionIsBalanced(t *testing.T) {
 					tt.entries[i].Currency = "USD"
 				}
 			}
-			tx := Transaction{Entries: tt.entries}
+			tx := Transaction{IdempotencyKey: "domain-test", Entries: tt.entries}
 			if got := tx.IsBalanced(); got != tt.want {
 				t.Fatalf("IsBalanced() = %v, want %v", got, tt.want)
 			}

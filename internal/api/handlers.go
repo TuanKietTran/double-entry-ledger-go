@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"github.com/TuanKietTran/double-entry-ledger-go/internal/command"
 	"github.com/TuanKietTran/double-entry-ledger-go/internal/domain"
 	"github.com/TuanKietTran/double-entry-ledger-go/internal/query"
+	"github.com/TuanKietTran/double-entry-ledger-go/internal/repository"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
@@ -129,7 +131,11 @@ func (h *Handlers) postTransaction(w http.ResponseWriter, r *http.Request) {
 		Entries:        entries,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		status := http.StatusBadRequest
+		if errors.Is(err, repository.ErrIdempotencyConflict) {
+			status = http.StatusConflict
+		}
+		http.Error(w, err.Error(), status)
 		return
 	}
 

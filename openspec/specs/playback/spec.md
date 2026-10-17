@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Ledger playback posts 1000 balanced $1 movements. The first play returns HTTP 200. The cash balance is 1000. The second play is an idempotent rejection and the balance stays 1000.
+Ledger playback posts 1000 balanced $1 movements. The first play returns HTTP 200. The cash balance is 1000. A second play returns the original successful result for each key and leaves the balance unchanged.
 
 ## Requirements
 
@@ -35,4 +35,4 @@ Playing the same call list again SHALL NOT apply a successful idempotent write a
 - **GIVEN** the first play of 1000 calls succeeded
 - **WHEN** the client plays that same list again
 - **THEN** stored totals are unchanged
-- **AND** each outcome is either the same success body or HTTP 400 containing `idempotency key already used`
+- **AND** each outcome returns HTTP 200 with the original transaction id

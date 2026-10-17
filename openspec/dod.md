@@ -10,7 +10,7 @@ Playback storyboard: `openspec/gifs/playback-flow.gif`.
 | --- | --- |
 | A balanced post returns a transaction id and moves both balances | `internal/command` handler test. Playback balance goes from $0 to $1, then to $1000. |
 | An unbalanced post is HTTP 400 and changes nothing | Handler test. |
-| A reused idempotency key is HTTP 400 with the original id and does not post again | Handler test and playback frame 6. Balance stays $1000. |
+| A same-payload idempotent retry returns HTTP 200 with the original id; changed payload is HTTP 409 and does not post again | `TestPostTransactionPayloadBoundIdempotency`, command and playback tests. |
 | An account with no entries reads as 0 USD | Handler test and Postgres test. |
 | `DATABASE_URL` unset uses memory. Set, it uses Postgres and the same balance and idempotency rules | `cmd/server` and `TestPostgresLedger`. |
 | A missing Postgres account row is created on post | Postgres test. |
@@ -37,4 +37,4 @@ Playback storyboard: `openspec/gifs/playback-flow.gif`.
 
 ## GIF review
 
-Good enough to show the flow. Frame 3 keeps the balance at $0 while the retry is in flight. Frame 6 returns HTTP 400 and the balance stays $1000. It is a storyboard of the test, not a screen capture.
+Legacy storyboard predates payload-bound replay: frame 6's HTTP 400 is no longer current behavior. Current tests prove same-payload HTTP 200 replay and unchanged totals. The GIF is a storyboard of the older test, not a screen capture.

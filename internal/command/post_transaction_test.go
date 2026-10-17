@@ -2,6 +2,7 @@ package command
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -133,12 +134,14 @@ func TestPostTransactionHandler_IdempotencyKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = post.Handle(context.Background(), cmd)
-	if err == nil || !strings.Contains(err.Error(), "idempotency key already used") {
-		t.Fatalf("err = %v, want idempotency conflict", err)
+	replayed, err := post.Handle(context.Background(), cmd)
+	if err != nil || replayed != id {
+		t.Fatalf("same-payload retry = %s, %v; want original id %s", replayed, err, id)
 	}
-	if !strings.Contains(err.Error(), id.String()) {
-		t.Fatalf("err = %v, want original id %s", err, id)
+	changed := cmd
+	changed.Description = "different payload"
+	if _, err := post.Handle(context.Background(), changed); !errors.Is(err, repository.ErrIdempotencyConflict) {
+		t.Fatalf("changed-payload retry err = %v, want idempotency conflict", err)
 	}
 
 	entries, err := repo.GetEntries(context.Background(), account)

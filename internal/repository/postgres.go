@@ -104,7 +104,14 @@ func (r *PostgresLedger) SaveTransaction(ctx context.Context, tx domain.Transact
 			`, tx.IdempotencyKey).Scan(&existing); qerr != nil {
 				return qerr
 			}
-			return fmt.Errorf("idempotency key already used: %s", existing)
+			stored, qerr := r.GetTransaction(ctx, existing)
+			if qerr != nil {
+				return qerr
+			}
+			if stored.SamePayload(tx) {
+				return nil
+			}
+			return fmt.Errorf("%w: %s", ErrIdempotencyConflict, existing)
 		}
 		return err
 	}

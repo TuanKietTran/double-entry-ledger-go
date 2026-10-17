@@ -34,7 +34,7 @@ func FuzzBalancedTotalsInvariant(f *testing.F) {
 		if debit <= 0 || credit <= 0 {
 			t.Skip()
 		}
-		tx := Transaction{Entries: []Entry{
+		tx := Transaction{IdempotencyKey: "fuzz-test", Entries: []Entry{
 			{AccountID: uuid.New(), Amount: decimal.NewFromInt(debit), Direction: Debit, Currency: "USD"},
 			{AccountID: uuid.New(), Amount: decimal.NewFromInt(credit), Direction: Credit, Currency: "USD"},
 		}}

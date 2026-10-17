@@ -28,15 +28,20 @@ The system SHALL reject a transaction whose debit total does not equal its credi
 - **AND** the body contains `not balanced`
 - **AND** both accounts still show a zero balance
 
-### Requirement: Idempotency key is single use
-The system SHALL reject a second post that reuses an idempotency key and SHALL NOT apply that second post.
+### Requirement: Idempotency key binds to its payload
+The system SHALL require a nonempty idempotency key and bind it to the transaction description and journal entries. A retry with the same payload SHALL return the original transaction id without another effect. Reuse with a different payload SHALL return HTTP 409 and SHALL NOT change the ledger.
 
-#### Scenario: Same key posted twice
+#### Scenario: Same key and payload replay
 - **GIVEN** a balanced post with key `same-key` succeeded and returned transaction id T
-- **WHEN** the client posts again with key `same-key`
-- **THEN** the response is HTTP 400
-- **AND** the body contains `idempotency key already used` and T
+- **WHEN** the client posts the same payload again with key `same-key`
+- **THEN** the response is HTTP 200 with transaction id T
 - **AND** each account still has only the entries from the first post
+
+#### Scenario: Same key with changed payload
+- **GIVEN** a balanced post with key `same-key` succeeded
+- **WHEN** the client reuses the key with a different description or journal payload
+- **THEN** the response is HTTP 409
+- **AND** no second transaction is recorded
 
 ### Requirement: Reject a malformed post
 The system SHALL reject a body it cannot apply, before any balance changes.

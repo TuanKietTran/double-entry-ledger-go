@@ -2,10 +2,10 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -150,9 +150,13 @@ func TestPostgresLedger(t *testing.T) {
 			{ID: uuid.New(), TransactionID: dup.ID, AccountID: account, Amount: decimal.NewFromInt(5), Direction: domain.Debit, Currency: "EUR"},
 			{ID: uuid.New(), TransactionID: dup.ID, AccountID: other, Amount: decimal.NewFromInt(5), Direction: domain.Credit, Currency: "EUR"},
 		}
-		err := repo.SaveTransaction(ctx, dup)
-		if err == nil || !strings.Contains(err.Error(), "idempotency key already used") || !strings.Contains(err.Error(), tx.ID.String()) {
-			t.Fatalf("err = %v", err)
+		if err := repo.SaveTransaction(ctx, dup); err != nil {
+			t.Fatalf("same-payload replay: %v", err)
+		}
+		changed := dup
+		changed.Description = "different payload"
+		if err := repo.SaveTransaction(ctx, changed); !errors.Is(err, ErrIdempotencyConflict) {
+			t.Fatalf("changed-payload replay error = %v, want conflict", err)
 		}
 		entries, err := repo.GetEntries(ctx, account)
 		if err != nil {
