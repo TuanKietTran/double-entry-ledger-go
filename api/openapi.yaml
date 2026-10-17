@@ -31,7 +31,9 @@ paths:
     post:
       operationId: postTransaction
       summary: Record a balanced transaction
-      A same-key, same-payload retry returns the original transaction; changed payload conflicts with HTTP 409.
+      description: >-
+        A same-key, same-payload retry returns the original transaction; changed
+        payload conflicts with HTTP 409.
       requestBody:
         required: true
         content:
