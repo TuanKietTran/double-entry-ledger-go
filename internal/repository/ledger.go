@@ -3,7 +3,7 @@ package repository
 import (
 	"context"
 
-	"github.com/example/double-entry-ledger/internal/domain"
+	"github.com/TuanKietTran/double-entry-ledger-go/internal/domain"
 	"github.com/shopspring/decimal"
 )
 

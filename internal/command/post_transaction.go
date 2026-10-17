@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/example/double-entry-ledger/internal/domain"
-	"github.com/example/double-entry-ledger/internal/repository"
+	"github.com/TuanKietTran/double-entry-ledger-go/internal/domain"
+	"github.com/TuanKietTran/double-entry-ledger-go/internal/repository"
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 )

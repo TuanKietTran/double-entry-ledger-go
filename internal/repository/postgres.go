@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/example/double-entry-ledger/internal/domain"
+	"github.com/TuanKietTran/double-entry-ledger-go/internal/domain"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"

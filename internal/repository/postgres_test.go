@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/example/double-entry-ledger/internal/domain"
+	"github.com/TuanKietTran/double-entry-ledger-go/internal/domain"
 	embeddedpostgres "github.com/fergusstrange/embedded-postgres"
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"

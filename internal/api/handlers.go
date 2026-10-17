@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/example/double-entry-ledger/internal/command"
-	"github.com/example/double-entry-ledger/internal/domain"
-	"github.com/example/double-entry-ledger/internal/query"
+	"github.com/TuanKietTran/double-entry-ledger-go/internal/command"
+	"github.com/TuanKietTran/double-entry-ledger-go/internal/domain"
+	"github.com/TuanKietTran/double-entry-ledger-go/internal/query"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"

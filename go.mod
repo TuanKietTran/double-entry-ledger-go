@@ -1,4 +1,4 @@
-module github.com/example/double-entry-ledger
+module github.com/TuanKietTran/double-entry-ledger-go
 
 go 1.22
 
