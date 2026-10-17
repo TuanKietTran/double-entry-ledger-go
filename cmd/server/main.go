@@ -35,8 +35,12 @@ func main() {
 	r.Use(middleware.Recoverer)
 	r.Mount("/v1", handlers.Routes())
 
-	log.Println("Ledger API listening on :8080")
-	log.Fatal(http.ListenAndServe(":8080", r))
+	addr := os.Getenv("HTTP_ADDR")
+	if addr == "" {
+		addr = ":8101"
+	}
+	log.Printf("Ledger API listening on %s", addr)
+	log.Fatal(http.ListenAndServe(addr, r))
 }
 
 func openRepo(ctx context.Context) (repository.LedgerRepository, func()) {

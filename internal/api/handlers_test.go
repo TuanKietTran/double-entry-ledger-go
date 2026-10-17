@@ -6,12 +6,13 @@ import (
 	"testing"
 
 	"github.com/TuanKietTran/double-entry-ledger-go/internal/command"
+	"github.com/TuanKietTran/double-entry-ledger-go/internal/query"
 	"github.com/TuanKietTran/double-entry-ledger-go/internal/repository"
 )
 
 func TestCreateAccountRouteProvisioning(t *testing.T) {
 	mem := repository.NewInMemoryLedger()
-	h := NewHandlers(nil, nil, command.NewCreateAccountHandler(mem))
+	h := NewHandlersWithLedger(nil, nil, command.NewCreateAccountHandler(mem), nil, query.NewLedgerQueries(mem), nil)
 	id := "550e8400-e29b-41d4-a716-446655440000"
 	body := `{"account_id":"` + id + `","owner_id":"fixture","currency":"USD","type":"ASSET"}`
 	req := httptest.NewRequest("POST", "/accounts", strings.NewReader(body))
@@ -25,6 +26,11 @@ func TestCreateAccountRouteProvisioning(t *testing.T) {
 	h.Routes().ServeHTTP(res, req)
 	if res.Code != 201 {
 		t.Fatalf("idempotent provisioning response = %d %q, want 201", res.Code, res.Body.String())
+	}
+	res = httptest.NewRecorder()
+	h.Routes().ServeHTTP(res, httptest.NewRequest("GET", "/accounts/"+id, nil))
+	if res.Code != 200 || !strings.Contains(res.Body.String(), `"version":0`) {
+		t.Fatalf("account read = %d %q, want version 0", res.Code, res.Body.String())
 	}
 }
 
