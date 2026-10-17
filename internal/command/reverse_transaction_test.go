@@ -76,6 +76,12 @@ func TestReverseTransactionIsAppendOnlyAndIdempotent(t *testing.T) {
 		t.Fatal(err)
 	}
 	reverse := NewReverseTransactionHandler(repo)
+	if _, err := reverse.Handle(ctx, uuid.New(), "missing"); err == nil {
+		t.Fatal("unknown original accepted")
+	}
+	if _, err := reverse.Handle(ctx, originalID, ""); err == nil {
+		t.Fatal("empty reversal key accepted")
+	}
 	first, err := reverse.Handle(ctx, originalID, "reverse-key")
 	if err != nil {
 		t.Fatal(err)
@@ -86,6 +92,9 @@ func TestReverseTransactionIsAppendOnlyAndIdempotent(t *testing.T) {
 	}
 	if _, err := reverse.Handle(ctx, originalID, "another-reversal"); err == nil {
 		t.Fatal("second reversal accepted")
+	}
+	if _, err := reverse.Handle(ctx, first, "reverse-reversal"); err == nil {
+		t.Fatal("reversal of reversal accepted")
 	}
 	tx, err := repo.GetTransaction(ctx, first)
 	if err != nil || tx.ReversalOf != originalID || len(tx.Entries) != 2 {
