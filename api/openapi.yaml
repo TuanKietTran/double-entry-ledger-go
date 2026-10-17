@@ -1,0 +1,69 @@
+openapi: 3.0.3
+info:
+  title: Double-Entry Ledger API
+  version: 1.0.0
+  description: >-
+    Current routes are implemented and documented below. Planned capabilities are
+    listed separately and are not callable until implemented and published.
+servers:
+  - url: http://localhost:8101
+paths:
+  /v1/transactions:
+    post:
+      operationId: postTransaction
+      summary: Record a balanced transaction
+      description: Legacy behavior: duplicate idempotency keys and validation errors return HTTP 400.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [idempotency_key, entries]
+              properties:
+                idempotency_key: { type: string }
+                description: { type: string }
+                entries:
+                  type: array
+                  items:
+                    type: object
+                    required: [account_id, amount, direction, currency]
+                    properties:
+                      account_id: { type: string, format: uuid }
+                      amount: { type: string, description: Exact decimal; JSON decimal input is accepted by the implementation. }
+                      direction: { type: string, enum: [DEBIT, CREDIT] }
+                      currency: { type: string, pattern: '^[A-Z]{3}$' }
+      responses:
+        '200':
+          description: Transaction posted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [transaction_id]
+                properties:
+                  transaction_id: { type: string, format: uuid }
+        '400': { description: Invalid JSON, account id, unbalanced post, or reused idempotency key }
+  /v1/accounts/{id}/balance:
+    get:
+      operationId: getAccountBalance
+      summary: Read an account balance
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Current account balance }
+        '400': { description: Account id is not a UUID }
+        '500': { description: Balance query failed }
+x-planned-capabilities:
+  description: Not implemented in this API version; these routes are roadmap only.
+  items:
+    - POST /v1/accounts
+    - GET /v1/accounts/{id}/entries
+    - GET /v1/accounts/{id}/balance?as_of={timestamp}
+    - GET /v1/trial-balance
+    - GET /v1/transactions/{id}
+    - GET /v1/transactions/by-idempotency-key/{key}
+    - POST /v1/transactions/{id}/reversals
