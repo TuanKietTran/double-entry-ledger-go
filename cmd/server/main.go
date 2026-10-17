@@ -2,22 +2,21 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
+	"net/http"
 
+	"github.com/example/double-entry-ledger/internal/api"
 	"github.com/example/double-entry-ledger/internal/command"
 	"github.com/example/double-entry-ledger/internal/domain"
 	"github.com/example/double-entry-ledger/internal/query"
-	"github.com/example/double-entry-ledger/internal/repository"
-	"github.com/google/uuid"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/shopspring/decimal"
 )
 
-// In-memory stub for demo
 type memRepo struct{}
 
 func (m *memRepo) SaveTransaction(ctx context.Context, tx domain.Transaction) error {
-	fmt.Printf("Saved transaction %s with %d entries\n", tx.ID, len(tx.Entries))
 	return nil
 }
 func (m *memRepo) GetBalance(ctx context.Context, id domain.AccountID) (decimal.Decimal, string, error) {
@@ -29,28 +28,15 @@ func (m *memRepo) GetEntries(ctx context.Context, id domain.AccountID) ([]domain
 
 func main() {
 	repo := &memRepo{}
-	postHandler := command.NewPostTransactionHandler(repo)
-	balanceHandler := query.NewGetBalanceHandler(repo)
+	postH := command.NewPostTransactionHandler(repo)
+	balH := query.NewGetBalanceHandler(repo)
+	handlers := api.NewHandlers(postH, balH)
 
-	accountID := uuid.New()
-	cmd := command.PostTransactionCommand{
-		IdempotencyKey: "demo-1",
-		Description:    "Test transfer",
-		Entries: []command.EntryInput{
-			{AccountID: accountID, Amount: decimal.NewFromInt(100), Direction: domain.Debit, Currency: "USD"},
-			{AccountID: uuid.New(), Amount: decimal.NewFromInt(100), Direction: domain.Credit, Currency: "USD"},
-		},
-	}
+	r := chi.NewRouter()
+	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
+	r.Mount("/v1", handlers.Routes())
 
-	id, err := postHandler.Handle(context.Background(), cmd)
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println("Posted transaction:", id)
-
-	bal, err := balanceHandler.Handle(context.Background(), query.GetBalanceQuery{AccountID: accountID})
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Printf("Balance: %s %s\n", bal.Available, bal.Currency)
+	log.Println("Ledger API listening on :8080")
+	log.Fatal(http.ListenAndServe(":8080", r))
 }
