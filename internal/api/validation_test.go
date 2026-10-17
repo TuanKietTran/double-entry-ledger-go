@@ -40,3 +40,16 @@ func TestAccountQueryRejectsInvalidPaginationAndTimestamp(t *testing.T) {
 		}
 	}
 }
+
+func TestAccountEntriesRejectsInvalidOffset(t *testing.T) {
+	mem := repository.NewInMemoryLedger()
+	h := NewHandlersWithLedger(nil, nil, nil, nil, query.NewLedgerQueries(mem), nil)
+	id := "550e8400-e29b-41d4-a716-446655440000"
+	for _, path := range []string{"/accounts/" + id + "/entries?offset=-1", "/accounts/" + id + "/entries?offset=abc", "/accounts/not-a-uuid/entries"} {
+		res := httptest.NewRecorder()
+		h.Routes().ServeHTTP(res, httptest.NewRequest("GET", path, nil))
+		if res.Code != 400 || strings.TrimSpace(res.Body.String()) == "" {
+			t.Errorf("GET %s = %d %q, want a 400 error", path, res.Code, res.Body.String())
+		}
+	}
+}
