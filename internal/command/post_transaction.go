@@ -2,7 +2,6 @@ package command
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/TuanKietTran/double-entry-ledger-go/internal/domain"
 	"github.com/TuanKietTran/double-entry-ledger-go/internal/repository"
@@ -50,8 +49,8 @@ func (h *PostTransactionHandler) Handle(ctx context.Context, cmd PostTransaction
 		})
 	}
 
-	if !tx.IsBalanced() {
-		return uuid.Nil, fmt.Errorf("transaction is not balanced")
+	if err := tx.Validate(); err != nil {
+		return uuid.Nil, err
 	}
 
 	if err := h.repo.SaveTransaction(ctx, tx); err != nil {

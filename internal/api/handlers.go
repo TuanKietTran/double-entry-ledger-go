@@ -53,10 +53,11 @@ func (h *Handlers) postTransaction(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "invalid account id", http.StatusBadRequest)
 			return
 		}
-		dir := domain.Debit
-		if e.Direction == "CREDIT" {
-			dir = domain.Credit
+		if e.Direction != string(domain.Debit) && e.Direction != string(domain.Credit) {
+			http.Error(w, "invalid direction", http.StatusBadRequest)
+			return
 		}
+		dir := domain.Direction(e.Direction)
 		entries[i] = command.EntryInput{
 			AccountID: id,
 			Amount:    e.Amount,
