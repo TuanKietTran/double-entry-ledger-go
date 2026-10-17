@@ -87,6 +87,27 @@ paths:
       responses:
         '200': { description: Transaction and journal entries }
         '404': { description: Transaction not found }
+  /v1/transactions/{id}/reversals:
+    post:
+      operationId: reverseTransaction
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [idempotency_key]
+              properties:
+                idempotency_key: { type: string }
+      responses:
+        '200': { description: Reversal transaction ID; retries return the original result }
+        '400': { description: Invalid original transaction or reversal request }
+        '409': { description: Idempotency key payload conflict }
   /v1/accounts/{id}/entries:
     get:
       operationId: getAccountEntries
@@ -129,5 +150,4 @@ paths:
         '500': { description: Balance query failed }
 x-planned-capabilities:
   description: Not implemented in this API version; these routes are roadmap only.
-  items:
-    - POST /v1/transactions/{id}/reversals
+  items: []
