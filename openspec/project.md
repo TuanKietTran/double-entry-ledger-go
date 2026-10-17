@@ -16,6 +16,7 @@ Go 1.22, Chi, `shopspring/decimal`, Google UUID. Postgres via `jackc/pgx` v5 whe
 | Date | Change | Evidence |
 | --- | --- | --- |
 | 2026-10-17 | Handler tests and Postgres repository | `a28e5fb`. `go test ./...`. Embedded Postgres 16 covered balance, idempotency, and an unknown account. |
+| 2026-10-17 | 1000 requests in one minute, retry, playback, coverage | `internal/playback`. 1000 posts plus one 503 retry each finished in 83ms. Replay did not change the balance. Statement coverage 50.2% (`go test -coverpkg=./...`). |
 
 ## Out of scope until implemented
 
