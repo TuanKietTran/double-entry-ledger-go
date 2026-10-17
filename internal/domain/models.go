@@ -72,6 +72,7 @@ func (a Account) Validate() error {
 
 type Transaction struct {
 	ID             TransactionID
+	ReversalOf     TransactionID
 	IdempotencyKey string
 	Description    string
 	Entries        []Entry
@@ -79,7 +80,7 @@ type Transaction struct {
 }
 
 func (t *Transaction) SamePayload(other Transaction) bool {
-	if t.IdempotencyKey != other.IdempotencyKey || t.Description != other.Description || len(t.Entries) != len(other.Entries) {
+	if t.IdempotencyKey != other.IdempotencyKey || t.Description != other.Description || t.ReversalOf != other.ReversalOf || len(t.Entries) != len(other.Entries) {
 		return false
 	}
 	left := append([]Entry(nil), t.Entries...)

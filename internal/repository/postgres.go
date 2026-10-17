@@ -80,6 +80,20 @@ func (r *PostgresLedger) GetAccount(ctx context.Context, id domain.AccountID) (d
 }
 
 func (r *PostgresLedger) SaveTransaction(ctx context.Context, tx domain.Transaction) error {
+	if tx.ReversalOf != uuid.Nil {
+		return fmt.Errorf("reversal transactions must use SaveReversal")
+	}
+	return r.save(ctx, tx, uuid.Nil)
+}
+
+func (r *PostgresLedger) SaveReversal(ctx context.Context, originalID domain.TransactionID, tx domain.Transaction) error {
+	if originalID == uuid.Nil || tx.ReversalOf != originalID {
+		return fmt.Errorf("reversal reference does not match original transaction")
+	}
+	return r.save(ctx, tx, originalID)
+}
+
+func (r *PostgresLedger) save(ctx context.Context, tx domain.Transaction, reversalOf domain.TransactionID) error {
 	if err := tx.Validate(); err != nil {
 		return err
 	}
@@ -89,13 +103,43 @@ func (r *PostgresLedger) SaveTransaction(ctx context.Context, tx domain.Transact
 	}
 	defer dbTx.Rollback(ctx)
 
+	if reversalOf != uuid.Nil {
+		var originalReversal uuid.UUID
+		if err := dbTx.QueryRow(ctx, `SELECT COALESCE(reversal_of, '00000000-0000-0000-0000-000000000000'::uuid) FROM transactions WHERE id = $1 FOR UPDATE`, reversalOf).Scan(&originalReversal); err != nil || originalReversal != uuid.Nil {
+			return fmt.Errorf("original transaction not found or is itself a reversal")
+		}
+		var replayID uuid.UUID
+		replayErr := dbTx.QueryRow(ctx, `SELECT id FROM transactions WHERE idempotency_key = $1`, tx.IdempotencyKey).Scan(&replayID)
+		if replayErr == nil {
+			stored, err := r.GetTransaction(ctx, replayID)
+			if err != nil {
+				return err
+			}
+			if stored.SamePayload(tx) {
+				return nil
+			}
+			return fmt.Errorf("%w: %s", ErrIdempotencyConflict, replayID)
+		}
+		if !errors.Is(replayErr, pgx.ErrNoRows) {
+			return replayErr
+		}
+		var existing uuid.UUID
+		err := dbTx.QueryRow(ctx, `SELECT id FROM transactions WHERE reversal_of = $1`, reversalOf).Scan(&existing)
+		if err == nil {
+			return fmt.Errorf("transaction already reversed")
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+	}
+
 	var inserted uuid.UUID
 	err = dbTx.QueryRow(ctx, `
-		INSERT INTO transactions (id, idempotency_key, description, status)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO transactions (id, idempotency_key, description, status, reversal_of)
+		VALUES ($1, $2, $3, $4, NULLIF($5, '00000000-0000-0000-0000-000000000000'::uuid))
 		ON CONFLICT (idempotency_key) DO NOTHING
 		RETURNING id
-	`, tx.ID, tx.IdempotencyKey, tx.Description, tx.Status).Scan(&inserted)
+	`, tx.ID, tx.IdempotencyKey, tx.Description, tx.Status, reversalOf).Scan(&inserted)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			var existing uuid.UUID
@@ -136,16 +180,16 @@ func (r *PostgresLedger) SaveTransaction(ctx context.Context, tx domain.Transact
 }
 
 func (r *PostgresLedger) GetTransaction(ctx context.Context, id domain.TransactionID) (domain.Transaction, error) {
-	return r.getTransaction(ctx, `SELECT id, idempotency_key, COALESCE(description, ''), status FROM transactions WHERE id = $1`, id)
+	return r.getTransaction(ctx, `SELECT id, idempotency_key, COALESCE(description, ''), status, COALESCE(reversal_of, '00000000-0000-0000-0000-000000000000'::uuid) FROM transactions WHERE id = $1`, id)
 }
 
 func (r *PostgresLedger) GetTransactionByIdempotencyKey(ctx context.Context, key string) (domain.Transaction, error) {
-	return r.getTransaction(ctx, `SELECT id, idempotency_key, COALESCE(description, ''), status FROM transactions WHERE idempotency_key = $1`, key)
+	return r.getTransaction(ctx, `SELECT id, idempotency_key, COALESCE(description, ''), status, COALESCE(reversal_of, '00000000-0000-0000-0000-000000000000'::uuid) FROM transactions WHERE idempotency_key = $1`, key)
 }
 
 func (r *PostgresLedger) getTransaction(ctx context.Context, sql string, arg any) (domain.Transaction, error) {
 	var tx domain.Transaction
-	if err := r.pool.QueryRow(ctx, sql, arg).Scan(&tx.ID, &tx.IdempotencyKey, &tx.Description, &tx.Status); err != nil {
+	if err := r.pool.QueryRow(ctx, sql, arg).Scan(&tx.ID, &tx.IdempotencyKey, &tx.Description, &tx.Status, &tx.ReversalOf); err != nil {
 		return domain.Transaction{}, err
 	}
 	entries, err := r.pool.Query(ctx, `SELECT id, transaction_id, account_id, amount::text, direction, currency, created_at FROM entries WHERE transaction_id = $1 ORDER BY id`, tx.ID)

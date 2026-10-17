@@ -35,6 +35,13 @@ func TestPostgresLedger(t *testing.T) {
 	if _, err := repo.pool.Exec(ctx, string(sqlBytes)); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
+	reversalMigration, err := os.ReadFile(filepath.Join("..", "..", "migrations", "002_reversals.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.pool.Exec(ctx, string(reversalMigration)); err != nil {
+		t.Fatalf("reversal migrate: %v", err)
+	}
 
 	t.Run("balance and entries", func(t *testing.T) {
 		cash := uuid.New()
@@ -171,6 +178,51 @@ func TestPostgresLedger(t *testing.T) {
 		}
 		if !bal.Equal(decimal.NewFromInt(5)) || cur != "EUR" {
 			t.Fatalf("balance = %s %s", bal, cur)
+		}
+	})
+
+	t.Run("reversal is append-only and unique", func(t *testing.T) {
+		a, b := uuid.New(), uuid.New()
+		for _, id := range []uuid.UUID{a, b} {
+			if err := repo.CreateAccount(ctx, domain.Account{ID: id, OwnerID: "fixture", Currency: "USD", Type: domain.Asset, Status: domain.AccountActive}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		original := domain.Transaction{ID: uuid.New(), IdempotencyKey: "reversal-original", Status: "POSTED", Entries: []domain.Entry{
+			{ID: uuid.New(), AccountID: a, Amount: decimal.NewFromInt(1), Direction: domain.Debit, Currency: "USD"},
+			{ID: uuid.New(), AccountID: b, Amount: decimal.NewFromInt(1), Direction: domain.Credit, Currency: "USD"},
+		}}
+		for i := range original.Entries {
+			original.Entries[i].TransactionID = original.ID
+		}
+		if err := repo.SaveTransaction(ctx, original); err != nil {
+			t.Fatal(err)
+		}
+		reversal := domain.Transaction{ID: uuid.New(), ReversalOf: original.ID, IdempotencyKey: "reversal-entry", Status: "POSTED", Entries: []domain.Entry{
+			{ID: uuid.New(), AccountID: a, Amount: decimal.NewFromInt(1), Direction: domain.Credit, Currency: "USD"},
+			{ID: uuid.New(), AccountID: b, Amount: decimal.NewFromInt(1), Direction: domain.Debit, Currency: "USD"},
+		}}
+		for i := range reversal.Entries {
+			reversal.Entries[i].TransactionID = reversal.ID
+		}
+		if err := repo.SaveReversal(ctx, original.ID, reversal); err != nil {
+			t.Fatal(err)
+		}
+		if err := repo.SaveReversal(ctx, original.ID, reversal); err != nil {
+			t.Fatalf("identical reversal replay: %v", err)
+		}
+		duplicate := reversal
+		duplicate.ID, duplicate.IdempotencyKey = uuid.New(), "second-reversal"
+		for i := range duplicate.Entries {
+			duplicate.Entries[i].ID = uuid.New()
+			duplicate.Entries[i].TransactionID = duplicate.ID
+		}
+		if err := repo.SaveReversal(ctx, original.ID, duplicate); err == nil {
+			t.Fatal("second reversal unexpectedly accepted")
+		}
+		stored, err := repo.GetTransaction(ctx, reversal.ID)
+		if err != nil || stored.ReversalOf != original.ID {
+			t.Fatalf("reversal lookup=%+v err=%v", stored, err)
 		}
 	})
 

@@ -26,10 +26,11 @@ func TestOpenAPIListsCurrentRoutesAndStatuses(t *testing.T) {
 		"GET /accounts/{id}/balance":                 "  /v1/accounts/{id}/balance:\n    get:",
 		"GET /accounts/{id}/entries":                 "  /v1/accounts/{id}/entries:\n    get:",
 		"GET /trial-balance":                         "  /v1/trial-balance:\n    get:",
+		"POST /transactions/{id}/reversals":          "  /v1/transactions/{id}/reversals:\n    post:",
 	}
 	registered := map[string]bool{}
 	mem := repository.NewInMemoryLedger()
-	handlers := NewHandlersWithTransactionQueries(nil, nil, command.NewCreateAccountHandler(mem), query.NewGetTransactionHandler(mem), query.NewLedgerQueries(mem))
+	handlers := NewHandlersWithLedger(nil, nil, command.NewCreateAccountHandler(mem), query.NewGetTransactionHandler(mem), query.NewLedgerQueries(mem), command.NewReverseTransactionHandler(mem))
 	if err := chi.Walk(handlers.Routes(), func(method string, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
 		registered[method+" "+route] = true
 		return nil
@@ -49,7 +50,7 @@ func TestOpenAPIListsCurrentRoutesAndStatuses(t *testing.T) {
 			t.Errorf("OpenAPI missing implemented status %s", status)
 		}
 	}
-	for _, planned := range []string{"GET /v1/accounts/{id}/entries", "POST /v1/transactions/{id}/reversals"} {
+	for _, planned := range []string{} {
 		if strings.Contains(text, "\n  "+planned) {
 			t.Errorf("planned-only route must not be an OpenAPI path: %s", planned)
 		}

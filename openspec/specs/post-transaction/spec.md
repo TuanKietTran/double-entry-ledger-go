@@ -54,13 +54,23 @@ The system SHALL reject a body it cannot apply, before any balance changes.
 - **WHEN** an entry `account_id` is not a UUID
 - **THEN** the response is HTTP 400 and the body contains `invalid account id`
 
+### Requirement: Reversal is an append-only full journal
+The system SHALL reverse a posted transaction by appending a new transaction with the same accounts, amounts, and currencies and the opposite direction for every entry. Each original transaction SHALL have at most one reversal; reversing a reversal SHALL be rejected.
+
+#### Scenario: Full reversal preserves history
+- **GIVEN** a posted transaction T
+- **WHEN** a caller reverses T with an idempotency key
+- **THEN** a new transaction references T and contains opposite legs
+- **AND** T and its original entries remain unchanged
+- **AND** replaying the same reversal key returns the same reversal transaction id
+
 ### Requirement: Direction token
-The system SHALL treat the direction token `CREDIT` as a credit and every other token as a debit.
+The system SHALL accept only the exact direction tokens `DEBIT` and `CREDIT`.
 
 #### Scenario: Exact credit token
 - **WHEN** an entry direction is `CREDIT`
 - **THEN** the amount counts toward the credit total
 
-#### Scenario: Any other token
-- **WHEN** an entry direction is `DEBIT`, `credit`, or any other string
-- **THEN** the amount counts toward the debit total
+#### Scenario: Unknown direction
+- **WHEN** an entry direction is not exactly `DEBIT` or `CREDIT`
+- **THEN** the request is rejected with HTTP 400 before persistence

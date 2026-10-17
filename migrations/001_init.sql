@@ -13,6 +13,7 @@ CREATE TABLE transactions (
     idempotency_key TEXT UNIQUE NOT NULL,
     description TEXT,
     status TEXT NOT NULL,
+    reversal_of UUID REFERENCES transactions(id),
     posted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -25,6 +26,8 @@ CREATE TABLE entries (
     currency TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE UNIQUE INDEX idx_transactions_single_reversal ON transactions(reversal_of) WHERE reversal_of IS NOT NULL;
 
 CREATE INDEX idx_entries_account ON entries(account_id);
 CREATE INDEX idx_entries_tx ON entries(transaction_id);

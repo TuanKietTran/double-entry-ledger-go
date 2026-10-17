@@ -21,6 +21,7 @@ type AccountBalance struct {
 
 type LedgerRepository interface {
 	SaveTransaction(ctx context.Context, tx domain.Transaction) error
+	SaveReversal(ctx context.Context, originalID domain.TransactionID, tx domain.Transaction) error
 	GetTransaction(ctx context.Context, id domain.TransactionID) (domain.Transaction, error)
 	GetTransactionByIdempotencyKey(ctx context.Context, key string) (domain.Transaction, error)
 	GetBalance(ctx context.Context, accountID domain.AccountID) (decimal.Decimal, string, error)

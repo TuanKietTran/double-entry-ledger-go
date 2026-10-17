@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/TuanKietTran/double-entry-ledger-go/internal/domain"
+	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 )
 
@@ -55,12 +56,43 @@ func (r *InMemoryLedger) GetAccount(ctx context.Context, id domain.AccountID) (d
 }
 
 func (r *InMemoryLedger) SaveTransaction(ctx context.Context, tx domain.Transaction) error {
+	if tx.ReversalOf != uuid.Nil {
+		return fmt.Errorf("reversal transactions must use SaveReversal")
+	}
+	return r.save(ctx, tx, uuid.Nil)
+}
+
+func (r *InMemoryLedger) SaveReversal(ctx context.Context, originalID domain.TransactionID, tx domain.Transaction) error {
+	if originalID == uuid.Nil || tx.ReversalOf != originalID {
+		return fmt.Errorf("reversal reference does not match original transaction")
+	}
+	return r.save(ctx, tx, originalID)
+}
+
+func (r *InMemoryLedger) save(ctx context.Context, tx domain.Transaction, reversalOf domain.TransactionID) error {
 	if err := tx.Validate(); err != nil {
 		return err
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-
+	if existing, ok := r.idempotency[tx.IdempotencyKey]; ok {
+		stored := r.transactions[existing]
+		if stored.SamePayload(tx) {
+			return nil
+		}
+		return fmt.Errorf("%w: %s", ErrIdempotencyConflict, existing)
+	}
+	if reversalOf != uuid.Nil {
+		original, ok := r.transactions[reversalOf]
+		if !ok || original.ReversalOf != uuid.Nil {
+			return fmt.Errorf("original transaction not found or is itself a reversal")
+		}
+		for _, existing := range r.transactions {
+			if existing.ReversalOf == reversalOf {
+				return fmt.Errorf("transaction already reversed")
+			}
+		}
+	}
 	for _, entry := range tx.Entries {
 		account, ok := r.accounts[entry.AccountID]
 		if !ok {
@@ -70,18 +102,7 @@ func (r *InMemoryLedger) SaveTransaction(ctx context.Context, tx domain.Transact
 			return fmt.Errorf("account is inactive or currency does not match: %s", entry.AccountID)
 		}
 	}
-
-	if existing, ok := r.idempotency[tx.IdempotencyKey]; ok {
-		stored := r.transactions[existing]
-		if stored.SamePayload(tx) {
-			return nil
-		}
-		return fmt.Errorf("%w: %s", ErrIdempotencyConflict, existing)
-	}
-
-	r.transactions[tx.ID] = tx
 	r.idempotency[tx.IdempotencyKey] = tx.ID
-
 	for i := range tx.Entries {
 		if tx.Entries[i].CreatedAt.IsZero() {
 			tx.Entries[i].CreatedAt = time.Now().UTC()

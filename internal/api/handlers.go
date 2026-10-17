@@ -22,6 +22,7 @@ type Handlers struct {
 	createAccount  *command.CreateAccountHandler
 	getTransaction *query.GetTransactionHandler
 	ledgerQueries  *query.LedgerQueries
+	reverseTx      *command.ReverseTransactionHandler
 }
 
 func NewHandlers(post *command.PostTransactionHandler, bal *query.GetBalanceHandler, accounts ...*command.CreateAccountHandler) *Handlers {
@@ -52,11 +53,48 @@ func (h *Handlers) Routes() chi.Router {
 		r.Get("/transactions/{id}", h.getTransactionByID)
 		r.Get("/transactions/by-idempotency-key/{key}", h.getTransactionByKey)
 	}
+	if h.reverseTx != nil {
+		r.Post("/transactions/{id}/reversals", h.reverseTransaction)
+	}
 	if h.ledgerQueries != nil {
 		r.Get("/accounts/{id}/entries", h.getAccountEntries)
 		r.Get("/trial-balance", h.getTrialBalance)
 	}
 	return r
+}
+
+func NewHandlersWithLedger(post *command.PostTransactionHandler, bal *query.GetBalanceHandler, accounts *command.CreateAccountHandler, transactions *query.GetTransactionHandler, ledgerQueries *query.LedgerQueries, reverse *command.ReverseTransactionHandler) *Handlers {
+	h := NewHandlersWithTransactionQueries(post, bal, accounts, transactions, ledgerQueries)
+	h.reverseTx = reverse
+	return h
+}
+
+type reversalRequest struct {
+	IdempotencyKey string `json:"idempotency_key"`
+}
+
+func (h *Handlers) reverseTransaction(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.Error(w, "invalid transaction id", http.StatusBadRequest)
+		return
+	}
+	var req reversalRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	reversalID, err := h.reverseTx.Handle(r.Context(), id, req.IdempotencyKey)
+	if err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, repository.ErrIdempotencyConflict) {
+			status = http.StatusConflict
+		}
+		http.Error(w, err.Error(), status)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{"transaction_id": reversalID.String()})
 }
 
 type createAccountRequest struct {
@@ -145,6 +183,7 @@ func (h *Handlers) postTransaction(w http.ResponseWriter, r *http.Request) {
 
 type transactionResponse struct {
 	TransactionID  string          `json:"transaction_id"`
+	ReversalOf     string          `json:"reversal_of,omitempty"`
 	IdempotencyKey string          `json:"idempotency_key"`
 	Description    string          `json:"description"`
 	Status         string          `json:"status"`
@@ -166,6 +205,9 @@ func (h *Handlers) writeTransaction(w http.ResponseWriter, r *http.Request, tx d
 		return
 	}
 	response := transactionResponse{TransactionID: tx.ID.String(), IdempotencyKey: tx.IdempotencyKey, Description: tx.Description, Status: tx.Status}
+	if tx.ReversalOf != uuid.Nil {
+		response.ReversalOf = tx.ReversalOf.String()
+	}
 	for _, entry := range tx.Entries {
 		response.Entries = append(response.Entries, entryResponse{CreatedAt: entry.CreatedAt, EntryID: entry.ID.String(), AccountID: entry.AccountID.String(), Amount: entry.Amount.String(), Direction: string(entry.Direction), Currency: entry.Currency})
 	}
