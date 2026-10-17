@@ -164,6 +164,19 @@ paths:
         '200': { description: Current or as-of account balance }
         '400': { description: Account id is not a UUID }
         '500': { description: Balance query failed }
+components:
+  schemas:
+    ErrorEnvelope:
+      type: object
+      required: [error, request_id]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+        request_id: { type: string }
 x-planned-capabilities:
   description: Not implemented in this API version; these routes are roadmap only.
   items: []

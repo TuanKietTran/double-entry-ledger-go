@@ -44,6 +44,7 @@ func NewHandlersWithTransactionQueries(post *command.PostTransactionHandler, bal
 
 func (h *Handlers) Routes() chi.Router {
 	r := chi.NewRouter()
+	r.Use(requestIDMiddleware)
 	r.Post("/transactions", h.postTransaction)
 	r.Get("/accounts/{id}/balance", h.getBalance)
 	if h.createAccount != nil {
@@ -77,12 +78,12 @@ type reversalRequest struct {
 func (h *Handlers) reverseTransaction(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		http.Error(w, "invalid transaction id", http.StatusBadRequest)
+		writeError(w, r, "invalid transaction id", http.StatusBadRequest)
 		return
 	}
 	var req reversalRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeError(w, r, "invalid json", http.StatusBadRequest)
 		return
 	}
 	reversalID, err := h.reverseTx.Handle(r.Context(), id, req.IdempotencyKey)
@@ -91,7 +92,7 @@ func (h *Handlers) reverseTransaction(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, repository.ErrIdempotencyConflict) || errors.Is(err, repository.ErrVersionConflict) {
 			status = http.StatusConflict
 		}
-		http.Error(w, err.Error(), status)
+		writeError(w, r, err.Error(), status)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -107,18 +108,18 @@ type createAccountRequest struct {
 
 func (h *Handlers) createAccountRoute(w http.ResponseWriter, r *http.Request) {
 	var req createAccountRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeError(w, r, "invalid json", http.StatusBadRequest)
 		return
 	}
 	id, err := uuid.Parse(req.AccountID)
 	if err != nil {
-		http.Error(w, "invalid account id", http.StatusBadRequest)
+		writeError(w, r, "invalid account id", http.StatusBadRequest)
 		return
 	}
 	account := domain.Account{ID: id, OwnerID: req.OwnerID, Currency: req.Currency, Type: domain.AccountType(req.Type), Status: domain.AccountActive}
 	if err := h.createAccount.Handle(r.Context(), account); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeError(w, r, err.Error(), http.StatusBadRequest)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -140,8 +141,8 @@ type postTxRequest struct {
 
 func (h *Handlers) postTransaction(w http.ResponseWriter, r *http.Request) {
 	var req postTxRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeError(w, r, "invalid json", http.StatusBadRequest)
 		return
 	}
 
@@ -149,7 +150,7 @@ func (h *Handlers) postTransaction(w http.ResponseWriter, r *http.Request) {
 	for rawID, version := range req.ExpectedVersions {
 		id, err := uuid.Parse(rawID)
 		if err != nil || version < 0 {
-			http.Error(w, "invalid expected_versions", http.StatusBadRequest)
+			writeError(w, r, "invalid expected_versions", http.StatusBadRequest)
 			return
 		}
 		expectedVersions[id] = version
@@ -158,11 +159,11 @@ func (h *Handlers) postTransaction(w http.ResponseWriter, r *http.Request) {
 	for i, e := range req.Entries {
 		id, err := uuid.Parse(e.AccountID)
 		if err != nil {
-			http.Error(w, "invalid account id", http.StatusBadRequest)
+			writeError(w, r, "invalid account id", http.StatusBadRequest)
 			return
 		}
 		if e.Direction != string(domain.Debit) && e.Direction != string(domain.Credit) {
-			http.Error(w, "invalid direction", http.StatusBadRequest)
+			writeError(w, r, "invalid direction", http.StatusBadRequest)
 			return
 		}
 		dir := domain.Direction(e.Direction)
@@ -185,7 +186,7 @@ func (h *Handlers) postTransaction(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, repository.ErrIdempotencyConflict) || errors.Is(err, repository.ErrVersionConflict) {
 			status = http.StatusConflict
 		}
-		http.Error(w, err.Error(), status)
+		writeError(w, r, err.Error(), status)
 		return
 	}
 
@@ -213,7 +214,7 @@ type entryResponse struct {
 
 func (h *Handlers) writeTransaction(w http.ResponseWriter, r *http.Request, tx domain.Transaction, err error) {
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		writeError(w, r, err.Error(), http.StatusNotFound)
 		return
 	}
 	response := transactionResponse{TransactionID: tx.ID.String(), IdempotencyKey: tx.IdempotencyKey, Description: tx.Description, Status: tx.Status}
@@ -230,7 +231,7 @@ func (h *Handlers) writeTransaction(w http.ResponseWriter, r *http.Request, tx d
 func (h *Handlers) getTransactionByID(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		http.Error(w, "invalid transaction id", http.StatusBadRequest)
+		writeError(w, r, "invalid transaction id", http.StatusBadRequest)
 		return
 	}
 	tx, err := h.getTransaction.ByID(r.Context(), id)
@@ -245,12 +246,12 @@ func (h *Handlers) getTransactionByKey(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) getAccount(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		http.Error(w, "invalid account id", http.StatusBadRequest)
+		writeError(w, r, "invalid account id", http.StatusBadRequest)
 		return
 	}
 	account, err := h.ledgerQueries.Account(r.Context(), id)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		writeError(w, r, err.Error(), http.StatusNotFound)
 		return
 	}
 	response := map[string]any{"account_id": account.ID.String(), "owner_id": account.OwnerID, "currency": account.Currency, "type": account.Type, "status": account.Status, "version": account.Version}
@@ -261,14 +262,14 @@ func (h *Handlers) getAccount(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) getAccountEntries(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		http.Error(w, "invalid account id", http.StatusBadRequest)
+		writeError(w, r, "invalid account id", http.StatusBadRequest)
 		return
 	}
 	limit, offset := 50, 0
 	if raw := r.URL.Query().Get("limit"); raw != "" {
 		parsed, err := strconv.Atoi(raw)
 		if err != nil {
-			http.Error(w, "invalid limit", http.StatusBadRequest)
+			writeError(w, r, "invalid limit", http.StatusBadRequest)
 			return
 		}
 		limit = parsed
@@ -276,18 +277,18 @@ func (h *Handlers) getAccountEntries(w http.ResponseWriter, r *http.Request) {
 	if raw := r.URL.Query().Get("offset"); raw != "" {
 		parsed, err := strconv.Atoi(raw)
 		if err != nil {
-			http.Error(w, "invalid offset", http.StatusBadRequest)
+			writeError(w, r, "invalid offset", http.StatusBadRequest)
 			return
 		}
 		offset = parsed
 	}
 	if limit > 500 {
-		http.Error(w, "limit exceeds 500", http.StatusBadRequest)
+		writeError(w, r, "limit exceeds 500", http.StatusBadRequest)
 		return
 	}
 	entries, err := h.ledgerQueries.Entries(r.Context(), id, limit, offset)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeError(w, r, err.Error(), http.StatusBadRequest)
 		return
 	}
 	response := make([]entryResponse, 0, len(entries))
@@ -301,7 +302,7 @@ func (h *Handlers) getAccountEntries(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) getTrialBalance(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.ledgerQueries.TrialBalance(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeError(w, r, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	type trialBalanceRow struct {
@@ -321,19 +322,19 @@ func (h *Handlers) getBalance(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		http.Error(w, "invalid account id", http.StatusBadRequest)
+		writeError(w, r, "invalid account id", http.StatusBadRequest)
 		return
 	}
 
 	var res query.BalanceResult
 	if raw := r.URL.Query().Get("as_of"); raw != "" {
 		if h.ledgerQueries == nil {
-			http.Error(w, "as-of query unavailable", http.StatusInternalServerError)
+			writeError(w, r, "as-of query unavailable", http.StatusInternalServerError)
 			return
 		}
 		asOf, parseErr := time.Parse(time.RFC3339Nano, raw)
 		if parseErr != nil {
-			http.Error(w, "invalid as_of timestamp", http.StatusBadRequest)
+			writeError(w, r, "invalid as_of timestamp", http.StatusBadRequest)
 			return
 		}
 		res, err = h.ledgerQueries.BalanceAsOf(r.Context(), id, asOf)
@@ -341,7 +342,7 @@ func (h *Handlers) getBalance(w http.ResponseWriter, r *http.Request) {
 		res, err = h.getBal.Handle(r.Context(), query.GetBalanceQuery{AccountID: id})
 	}
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeError(w, r, err.Error(), http.StatusInternalServerError)
 		return
 	}
 

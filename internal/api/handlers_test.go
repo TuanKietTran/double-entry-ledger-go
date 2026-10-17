@@ -18,7 +18,7 @@ func TestCreateAccountRouteProvisioning(t *testing.T) {
 	req := httptest.NewRequest("POST", "/accounts", strings.NewReader(body))
 	res := httptest.NewRecorder()
 	h.Routes().ServeHTTP(res, req)
-	if res.Code != 201 || !strings.Contains(res.Body.String(), id) {
+	if res.Code != 201 || !strings.Contains(res.Body.String(), id) || res.Header().Get("X-Request-ID") == "" {
 		t.Fatalf("response = %d %q, want HTTP 201 with account_id", res.Code, res.Body.String())
 	}
 	req = httptest.NewRequest("POST", "/accounts", strings.NewReader(body))
