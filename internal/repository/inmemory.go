@@ -11,6 +11,7 @@ import (
 
 type InMemoryLedger struct {
 	mu           sync.RWMutex
+	accounts     map[domain.AccountID]domain.Account
 	transactions map[domain.TransactionID]domain.Transaction
 	entries      map[domain.AccountID][]domain.Entry
 	idempotency  map[string]domain.TransactionID
@@ -18,10 +19,37 @@ type InMemoryLedger struct {
 
 func NewInMemoryLedger() *InMemoryLedger {
 	return &InMemoryLedger{
+		accounts:     make(map[domain.AccountID]domain.Account),
 		transactions: make(map[domain.TransactionID]domain.Transaction),
 		entries:      make(map[domain.AccountID][]domain.Entry),
 		idempotency:  make(map[string]domain.TransactionID),
 	}
+}
+
+func (r *InMemoryLedger) CreateAccount(ctx context.Context, account domain.Account) error {
+	if err := account.Validate(); err != nil {
+		return err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if existing, ok := r.accounts[account.ID]; ok {
+		if existing == account {
+			return nil
+		}
+		return fmt.Errorf("account already exists with different attributes")
+	}
+	r.accounts[account.ID] = account
+	return nil
+}
+
+func (r *InMemoryLedger) GetAccount(ctx context.Context, id domain.AccountID) (domain.Account, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	account, ok := r.accounts[id]
+	if !ok {
+		return domain.Account{}, fmt.Errorf("account not found")
+	}
+	return account, nil
 }
 
 func (r *InMemoryLedger) SaveTransaction(ctx context.Context, tx domain.Transaction) error {

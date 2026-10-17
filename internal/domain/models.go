@@ -49,6 +49,24 @@ type Entry struct {
 	Currency      string
 }
 
+func (a Account) Validate() error {
+	if a.ID == uuid.Nil {
+		return fmt.Errorf("account id is required")
+	}
+	if !validCurrency(a.Currency) {
+		return fmt.Errorf("invalid currency %q", a.Currency)
+	}
+	switch a.Type {
+	case Asset, Liability, Equity, Revenue, Expense:
+	default:
+		return fmt.Errorf("invalid account type %q", a.Type)
+	}
+	if a.Status != AccountActive && a.Status != AccountInactive {
+		return fmt.Errorf("invalid account status %q", a.Status)
+	}
+	return nil
+}
+
 type Transaction struct {
 	ID             TransactionID
 	IdempotencyKey string
