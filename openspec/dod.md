@@ -1,40 +1,33 @@
-# Definition of done
+# Definition of done (checkpoint 2026-10-18)
 
-A box is **Met** only when the code behaves that way and a test asserts it. **Partial** means the code does it, but no test asserts that scenario. **Unmet** means it is not implemented.
-
-Playback storyboard: `openspec/gifs/playback-flow.gif`.
+A **Met** row names executable evidence. This checkpoint measures repository/test evidence only; no production deployment or live-process performance claim is made.
 
 ## Met
 
-| Done when | Evidence |
-| --- | --- |
-| A balanced post returns a transaction id and moves both balances | `internal/command` handler test. Playback balance goes from $0 to $1, then to $1000. |
-| An unbalanced post is HTTP 400 and changes nothing | Handler test. |
-| A same-payload idempotent retry returns HTTP 200 with the original id; changed payload is HTTP 409 and does not post again | `TestPostTransactionPayloadBoundIdempotency`, command and playback tests. |
-| An account with no entries reads as 0 USD | Handler test and Postgres test. |
-| `DATABASE_URL` unset uses memory. Set, it uses Postgres and the same balance and idempotency rules | `cmd/server` and `TestPostgresLedger`. |
-| A missing Postgres account row is created on post | Postgres test. |
-| 1000 calls finish in under 60 seconds, with one HTTP 503 retried on each call | Playback test, 83ms. |
-| HTTP 408, 429, and 5xx retry up to 3 times. HTTP 400 does not retry | `TestRetriesTransientFailure`, `TestDoesNotRetryClientError`, `TestStopsAfterMaxAttempts`. |
-| Statement coverage is measured and written on the checkpoint | 50.2% from `go test -coverpkg=./...`. |
+| Requirement | Evidence |
+|---|---|
+| Exact positive balanced single-currency journals, strict directions, explicit accounts | `go test -p 2 ./... -race -count=1 -cover`; domain package coverage 93.7%; account/domain/repository invariant tests |
+| Payload-bound idempotent posting and append-only full reversal | command/API/repository reversal and idempotency tests; embedded Postgres suite passed |
+| Account versions and query interfaces (lookup, entries, as-of balance, trial balance) | API/query/repository tests in full race suite |
+| Memory/Postgres implementation | repository tests use in-memory and embedded Postgres; full suite passed |
+| HTTP routes and statuses contract parsed and checked against registrations | `TestOpenAPIListsCurrentRoutesAndStatuses` parses YAML and checks exact route set and required statuses |
+| Operational endpoints and bounded server configuration | `cmd/server` tests; full race suite |
+| Domain >=90%, weighted non-cmd/internal >=80% | domain 93.7%; weighted internal 84.0%, measured in card 5d with `-coverpkg=./internal/...` |
 
 ## Partial
 
-| Done when | Why it is not Met |
-| --- | --- |
-| Invalid JSON and a non-UUID account id are HTTP 400 | Implemented in the handler. No test sends those bodies. |
-| Only the token `CREDIT` counts as a credit | Implemented. The tests use `DEBIT` and `CREDIT` and never a lowercase token. |
-| An empty entry list is accepted | `IsBalanced` treats 0 as 0. No test posts an empty list. |
-| Currency is the latest entry's currency | The USD path is tested. An EUR entry is not. |
+| Requirement | Limitation |
+|---|---|
+| Overall runtime resilience | Health/readiness/metrics, request IDs, body limits and graceful shutdown exist; no downstream clients/outbox/retry circuit breaker are needed or implemented because ledger consumes no service. Real-process smoke and shutdown probe were not run. |
+| Contract validation | YAML syntax, route set and required statuses are tested; all OpenAPI schema semantics and every error/result body shape are not exhaustively validated. |
+| PostgreSQL concurrency | Atomicity and stale version behavior tested; simultaneous conflicting DB-client reversal/idempotency races are not separately stress-tested. |
+| Operations portability | CI workflow is authored but not run; Docker unavailable; Linux/macOS unverified. |
 
-## Unmet
+## Unmet / not claimed
 
-| Not done | Why |
-| --- | --- |
-| `CreateAccount` as its own command | A missing row is created only as a side effect of a Postgres post. |
-| `GetAccountEntries` over HTTP | Entries exist on the repository port only. |
-| Coverage at a high bar | 50.2% is the measured total. `cmd/server` and some branches are untested. There is no 80% gate. |
+| Requirement | Limitation |
+|---|---|
+| Stable cursor pagination under concurrent appends | Current deterministic offset pagination may shift as new entries arrive. |
+| Production durability, real money, external integrations, deployment | Out of scope; no such claims are made. |
 
-## GIF review
-
-Legacy storyboard predates payload-bound replay: frame 6's HTTP 400 is no longer current behavior. Current tests prove same-payload HTTP 200 replay and unchanged totals. The GIF is a storyboard of the older test, not a screen capture.
+Playback is regression evidence only, not real-process load evidence. The legacy storyboard predates payload-bound replay.
