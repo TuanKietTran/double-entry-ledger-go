@@ -57,6 +57,7 @@ func (h *Handlers) Routes() chi.Router {
 		r.Post("/transactions/{id}/reversals", h.reverseTransaction)
 	}
 	if h.ledgerQueries != nil {
+		r.Get("/accounts/{id}", h.getAccount)
 		r.Get("/accounts/{id}/entries", h.getAccountEntries)
 		r.Get("/trial-balance", h.getTrialBalance)
 	}
@@ -87,7 +88,7 @@ func (h *Handlers) reverseTransaction(w http.ResponseWriter, r *http.Request) {
 	reversalID, err := h.reverseTx.Handle(r.Context(), id, req.IdempotencyKey)
 	if err != nil {
 		status := http.StatusBadRequest
-		if errors.Is(err, repository.ErrIdempotencyConflict) {
+		if errors.Is(err, repository.ErrIdempotencyConflict) || errors.Is(err, repository.ErrVersionConflict) {
 			status = http.StatusConflict
 		}
 		http.Error(w, err.Error(), status)
@@ -126,9 +127,10 @@ func (h *Handlers) createAccountRoute(w http.ResponseWriter, r *http.Request) {
 }
 
 type postTxRequest struct {
-	IdempotencyKey string `json:"idempotency_key"`
-	Description    string `json:"description"`
-	Entries        []struct {
+	IdempotencyKey   string           `json:"idempotency_key"`
+	ExpectedVersions map[string]int64 `json:"expected_versions,omitempty"`
+	Description      string           `json:"description"`
+	Entries          []struct {
 		AccountID string          `json:"account_id"`
 		Amount    decimal.Decimal `json:"amount"`
 		Direction string          `json:"direction"`
@@ -143,6 +145,15 @@ func (h *Handlers) postTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	expectedVersions := make(map[domain.AccountID]int64, len(req.ExpectedVersions))
+	for rawID, version := range req.ExpectedVersions {
+		id, err := uuid.Parse(rawID)
+		if err != nil || version < 0 {
+			http.Error(w, "invalid expected_versions", http.StatusBadRequest)
+			return
+		}
+		expectedVersions[id] = version
+	}
 	entries := make([]command.EntryInput, len(req.Entries))
 	for i, e := range req.Entries {
 		id, err := uuid.Parse(e.AccountID)
@@ -164,13 +175,14 @@ func (h *Handlers) postTransaction(w http.ResponseWriter, r *http.Request) {
 	}
 
 	id, err := h.postTx.Handle(r.Context(), command.PostTransactionCommand{
-		IdempotencyKey: req.IdempotencyKey,
-		Description:    req.Description,
-		Entries:        entries,
+		IdempotencyKey:   req.IdempotencyKey,
+		ExpectedVersions: expectedVersions,
+		Description:      req.Description,
+		Entries:          entries,
 	})
 	if err != nil {
 		status := http.StatusBadRequest
-		if errors.Is(err, repository.ErrIdempotencyConflict) {
+		if errors.Is(err, repository.ErrIdempotencyConflict) || errors.Is(err, repository.ErrVersionConflict) {
 			status = http.StatusConflict
 		}
 		http.Error(w, err.Error(), status)
@@ -228,6 +240,22 @@ func (h *Handlers) getTransactionByID(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) getTransactionByKey(w http.ResponseWriter, r *http.Request) {
 	tx, err := h.getTransaction.ByIdempotencyKey(r.Context(), chi.URLParam(r, "key"))
 	h.writeTransaction(w, r, tx, err)
+}
+
+func (h *Handlers) getAccount(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.Error(w, "invalid account id", http.StatusBadRequest)
+		return
+	}
+	account, err := h.ledgerQueries.Account(r.Context(), id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	response := map[string]any{"account_id": account.ID.String(), "owner_id": account.OwnerID, "currency": account.Currency, "type": account.Type, "status": account.Status, "version": account.Version}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(response)
 }
 
 func (h *Handlers) getAccountEntries(w http.ResponseWriter, r *http.Request) {

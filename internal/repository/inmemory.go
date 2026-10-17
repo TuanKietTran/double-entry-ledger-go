@@ -36,7 +36,7 @@ func (r *InMemoryLedger) CreateAccount(ctx context.Context, account domain.Accou
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if existing, ok := r.accounts[account.ID]; ok {
-		if existing == account {
+		if existing.SameDefinition(account) {
 			return nil
 		}
 		return fmt.Errorf("account already exists with different attributes")
@@ -93,6 +93,7 @@ func (r *InMemoryLedger) save(ctx context.Context, tx domain.Transaction, revers
 			}
 		}
 	}
+	usedAccounts := make(map[domain.AccountID]struct{})
 	for _, entry := range tx.Entries {
 		account, ok := r.accounts[entry.AccountID]
 		if !ok {
@@ -101,6 +102,15 @@ func (r *InMemoryLedger) save(ctx context.Context, tx domain.Transaction, revers
 		if account.Status != domain.AccountActive || account.Currency != entry.Currency {
 			return fmt.Errorf("account is inactive or currency does not match: %s", entry.AccountID)
 		}
+		if expected, ok := tx.ExpectedVersions[entry.AccountID]; ok && account.Version != expected {
+			return fmt.Errorf("%w: account %s expected %d actual %d", ErrVersionConflict, entry.AccountID, expected, account.Version)
+		}
+		usedAccounts[entry.AccountID] = struct{}{}
+	}
+	for id := range usedAccounts {
+		account := r.accounts[id]
+		account.Version++
+		r.accounts[id] = account
 	}
 	r.idempotency[tx.IdempotencyKey] = tx.ID
 	for i := range tx.Entries {

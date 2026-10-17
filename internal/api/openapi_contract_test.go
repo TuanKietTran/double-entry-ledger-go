@@ -24,6 +24,7 @@ func TestOpenAPIListsCurrentRoutesAndStatuses(t *testing.T) {
 		"GET /transactions/{id}":                     "  /v1/transactions/{id}:\n    get:",
 		"GET /transactions/by-idempotency-key/{key}": "  /v1/transactions/by-idempotency-key/{key}:\n    get:",
 		"GET /accounts/{id}/balance":                 "  /v1/accounts/{id}/balance:\n    get:",
+		"GET /accounts/{id}":                         "  /v1/accounts/{id}:\n    get:",
 		"GET /accounts/{id}/entries":                 "  /v1/accounts/{id}/entries:\n    get:",
 		"GET /trial-balance":                         "  /v1/trial-balance:\n    get:",
 		"POST /transactions/{id}/reversals":          "  /v1/transactions/{id}/reversals:\n    post:",

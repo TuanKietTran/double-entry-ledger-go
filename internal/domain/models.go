@@ -36,10 +36,15 @@ const (
 
 type Account struct {
 	ID       AccountID
+	Version  int64
 	OwnerID  string
 	Currency string
 	Type     AccountType
 	Status   AccountStatus
+}
+
+func (a Account) SameDefinition(other Account) bool {
+	return a.ID == other.ID && a.OwnerID == other.OwnerID && a.Currency == other.Currency && a.Type == other.Type && a.Status == other.Status
 }
 
 type Entry struct {
@@ -53,6 +58,9 @@ type Entry struct {
 }
 
 func (a Account) Validate() error {
+	if a.Version < 0 {
+		return fmt.Errorf("account version cannot be negative")
+	}
 	if a.ID == uuid.Nil {
 		return fmt.Errorf("account id is required")
 	}
@@ -71,12 +79,13 @@ func (a Account) Validate() error {
 }
 
 type Transaction struct {
-	ID             TransactionID
-	ReversalOf     TransactionID
-	IdempotencyKey string
-	Description    string
-	Entries        []Entry
-	Status         string
+	ID               TransactionID
+	ReversalOf       TransactionID
+	ExpectedVersions map[AccountID]int64
+	IdempotencyKey   string
+	Description      string
+	Entries          []Entry
+	Status           string
 }
 
 func (t *Transaction) SamePayload(other Transaction) bool {

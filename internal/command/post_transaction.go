@@ -10,9 +10,10 @@ import (
 )
 
 type PostTransactionCommand struct {
-	IdempotencyKey string
-	Description    string
-	Entries        []EntryInput
+	IdempotencyKey   string
+	ExpectedVersions map[domain.AccountID]int64
+	Description      string
+	Entries          []EntryInput
 }
 
 type EntryInput struct {
@@ -32,10 +33,11 @@ func NewPostTransactionHandler(repo repository.LedgerRepository) *PostTransactio
 
 func (h *PostTransactionHandler) Handle(ctx context.Context, cmd PostTransactionCommand) (domain.TransactionID, error) {
 	tx := domain.Transaction{
-		ID:             uuid.New(),
-		IdempotencyKey: cmd.IdempotencyKey,
-		Description:    cmd.Description,
-		Status:         "POSTED",
+		ID:               uuid.New(),
+		IdempotencyKey:   cmd.IdempotencyKey,
+		ExpectedVersions: cmd.ExpectedVersions,
+		Description:      cmd.Description,
+		Status:           "POSTED",
 	}
 
 	for _, e := range cmd.Entries {

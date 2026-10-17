@@ -181,6 +181,38 @@ func TestPostgresLedger(t *testing.T) {
 		}
 	})
 
+	t.Run("optimistic account versions reject stale posts atomically", func(t *testing.T) {
+		a, b := uuid.New(), uuid.New()
+		for _, id := range []uuid.UUID{a, b} {
+			if err := repo.CreateAccount(ctx, domain.Account{ID: id, OwnerID: "fixture", Currency: "USD", Type: domain.Asset, Status: domain.AccountActive}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		makeTx := func(key string, version int64) domain.Transaction {
+			tx := domain.Transaction{ID: uuid.New(), IdempotencyKey: key, Status: "POSTED", ExpectedVersions: map[domain.AccountID]int64{a: version, b: version}, Entries: []domain.Entry{
+				{ID: uuid.New(), AccountID: a, Amount: decimal.NewFromInt(1), Direction: domain.Debit, Currency: "USD"},
+				{ID: uuid.New(), AccountID: b, Amount: decimal.NewFromInt(1), Direction: domain.Credit, Currency: "USD"},
+			}}
+			for i := range tx.Entries {
+				tx.Entries[i].TransactionID = tx.ID
+			}
+			return tx
+		}
+		if err := repo.SaveTransaction(ctx, makeTx("version-0", 0)); err != nil {
+			t.Fatal(err)
+		}
+		if err := repo.SaveTransaction(ctx, makeTx("stale-version", 0)); !errors.Is(err, ErrVersionConflict) {
+			t.Fatalf("stale err=%v", err)
+		}
+		account, err := repo.GetAccount(ctx, a)
+		if err != nil || account.Version != 1 {
+			t.Fatalf("account version=%d err=%v", account.Version, err)
+		}
+		if err := repo.SaveTransaction(ctx, makeTx("version-1", 1)); err != nil {
+			t.Fatal(err)
+		}
+	})
+
 	t.Run("reversal is append-only and unique", func(t *testing.T) {
 		a, b := uuid.New(), uuid.New()
 		for _, id := range []uuid.UUID{a, b} {

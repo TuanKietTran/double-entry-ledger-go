@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/TuanKietTran/double-entry-ledger-go/internal/domain"
@@ -59,7 +60,7 @@ func (r *PostgresLedger) CreateAccount(ctx context.Context, account domain.Accou
 	if err != nil {
 		return err
 	}
-	if existing != account {
+	if !existing.SameDefinition(account) {
 		return fmt.Errorf("account already exists with different attributes")
 	}
 	return nil
@@ -69,8 +70,8 @@ func (r *PostgresLedger) GetAccount(ctx context.Context, id domain.AccountID) (d
 	var account domain.Account
 	var accountType, status string
 	err := r.pool.QueryRow(ctx, `
-		SELECT id, owner_id, currency, type, status FROM accounts WHERE id = $1
-	`, id).Scan(&account.ID, &account.OwnerID, &account.Currency, &accountType, &status)
+		SELECT id, owner_id, currency, type, status, version FROM accounts WHERE id = $1
+	`, id).Scan(&account.ID, &account.OwnerID, &account.Currency, &accountType, &status, &account.Version)
 	if err != nil {
 		return domain.Account{}, err
 	}
@@ -160,18 +161,40 @@ func (r *PostgresLedger) save(ctx context.Context, tx domain.Transaction, revers
 		return err
 	}
 
+	usedAccounts := make(map[domain.AccountID]struct{})
+	for _, entry := range tx.Entries {
+		usedAccounts[entry.AccountID] = struct{}{}
+	}
+	accountIDs := make([]domain.AccountID, 0, len(usedAccounts))
+	for id := range usedAccounts {
+		accountIDs = append(accountIDs, id)
+	}
+	sort.Slice(accountIDs, func(i, j int) bool { return accountIDs[i].String() < accountIDs[j].String() })
+	for _, id := range accountIDs {
+		accountCurrency, status := "", ""
+		var version int64
+		if err := dbTx.QueryRow(ctx, `SELECT currency, status, version FROM accounts WHERE id = $1 FOR UPDATE`, id).Scan(&accountCurrency, &status, &version); err != nil {
+			return fmt.Errorf("account not found: %s: %w", id, err)
+		}
+		if status != string(domain.AccountActive) {
+			return fmt.Errorf("account is inactive: %s", id)
+		}
+		if expected, ok := tx.ExpectedVersions[id]; ok && version != expected {
+			return fmt.Errorf("%w: account %s expected %d actual %d", ErrVersionConflict, id, expected, version)
+		}
+		for _, entry := range tx.Entries {
+			if entry.AccountID == id && entry.Currency != accountCurrency {
+				return fmt.Errorf("account currency does not match: %s", id)
+			}
+		}
+	}
 	for _, e := range tx.Entries {
-		var currency, status string
-		if err := dbTx.QueryRow(ctx, `SELECT currency, status FROM accounts WHERE id = $1 FOR UPDATE`, e.AccountID).Scan(&currency, &status); err != nil {
-			return fmt.Errorf("account not found: %s: %w", e.AccountID, err)
+		if _, err := dbTx.Exec(ctx, `INSERT INTO entries (id, transaction_id, account_id, amount, direction, currency) VALUES ($1, $2, $3, $4, $5, $6)`, e.ID, e.TransactionID, e.AccountID, e.Amount.String(), string(e.Direction), e.Currency); err != nil {
+			return err
 		}
-		if status != string(domain.AccountActive) || currency != e.Currency {
-			return fmt.Errorf("account is inactive or currency does not match: %s", e.AccountID)
-		}
-		if _, err := dbTx.Exec(ctx, `
-			INSERT INTO entries (id, transaction_id, account_id, amount, direction, currency)
-			VALUES ($1, $2, $3, $4, $5, $6)
-		`, e.ID, e.TransactionID, e.AccountID, e.Amount.String(), string(e.Direction), e.Currency); err != nil {
+	}
+	for _, id := range accountIDs {
+		if _, err := dbTx.Exec(ctx, `UPDATE accounts SET version = version + 1 WHERE id = $1`, id); err != nil {
 			return err
 		}
 	}

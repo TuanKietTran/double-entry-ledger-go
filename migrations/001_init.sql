@@ -5,6 +5,7 @@ CREATE TABLE accounts (
     currency TEXT NOT NULL,
     type TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'ACTIVE',
+    version BIGINT NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

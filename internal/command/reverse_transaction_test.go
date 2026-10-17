@@ -2,6 +2,8 @@ package command
 
 import (
 	"context"
+	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/TuanKietTran/double-entry-ledger-go/internal/domain"
@@ -10,6 +12,51 @@ import (
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 )
+
+func TestConcurrentReversalsAllowExactlyOneEffect(t *testing.T) {
+	ctx := context.Background()
+	repo := repository.NewInMemoryLedger()
+	a, b := uuid.New(), uuid.New()
+	for _, id := range []uuid.UUID{a, b} {
+		if err := repo.CreateAccount(ctx, domain.Account{ID: id, Currency: "USD", Type: domain.Asset, Status: domain.AccountActive}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	originalID, err := NewPostTransactionHandler(repo).Handle(ctx, PostTransactionCommand{IdempotencyKey: "race-original", Entries: []EntryInput{
+		{AccountID: a, Amount: decimal.NewFromInt(2), Direction: domain.Debit, Currency: "USD"},
+		{AccountID: b, Amount: decimal.NewFromInt(2), Direction: domain.Credit, Currency: "USD"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reverse := NewReverseTransactionHandler(repo)
+	const workers = 12
+	var wg sync.WaitGroup
+	successes := make(chan uuid.UUID, workers)
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			id, err := reverse.Handle(ctx, originalID, fmt.Sprintf("reverse-race-%d", i))
+			if err == nil {
+				successes <- id
+			}
+		}(i)
+	}
+	wg.Wait()
+	close(successes)
+	var count int
+	for range successes {
+		count++
+	}
+	if count != 1 {
+		t.Fatalf("successful reversals=%d, want exactly one", count)
+	}
+	entries, err := repo.GetEntries(ctx, a)
+	if err != nil || len(entries) != 2 {
+		t.Fatalf("account entries=%d err=%v", len(entries), err)
+	}
+}
 
 func TestReverseTransactionIsAppendOnlyAndIdempotent(t *testing.T) {
 	ctx := context.Background()

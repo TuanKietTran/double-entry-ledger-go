@@ -41,6 +41,10 @@ paths:
               required: [idempotency_key, entries]
               properties:
                 idempotency_key: { type: string }
+                expected_versions:
+                  type: object
+                  additionalProperties: { type: integer, format: int64, minimum: 0 }
+                  description: Optional account_id to version preconditions; stale versions return 409.
                 description: { type: string }
                 entries:
                   type: array
@@ -63,7 +67,7 @@ paths:
                 properties:
                   transaction_id: { type: string, format: uuid }
         '400': { description: Invalid JSON, account id, direction, or journal invariants }
-        '409': { description: Idempotency key was already used with a different payload }
+        '409': { description: Idempotency payload conflict or stale account version }
   /v1/transactions/{id}:
     get:
       operationId: getTransactionByID
@@ -108,6 +112,18 @@ paths:
         '200': { description: Reversal transaction ID; retries return the original result }
         '400': { description: Invalid original transaction or reversal request }
         '409': { description: Idempotency key payload conflict }
+  /v1/accounts/{id}:
+    get:
+      operationId: getAccount
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Account definition and current concurrency version }
+        '400': { description: Invalid account UUID }
+        '404': { description: Account not found }
   /v1/accounts/{id}/entries:
     get:
       operationId: getAccountEntries

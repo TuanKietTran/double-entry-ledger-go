@@ -13,6 +13,10 @@ type LedgerQueries struct{ repo repository.LedgerRepository }
 func NewLedgerQueries(repo repository.LedgerRepository) *LedgerQueries {
 	return &LedgerQueries{repo: repo}
 }
+func (h *LedgerQueries) Account(ctx context.Context, id domain.AccountID) (domain.Account, error) {
+	return h.repo.GetAccount(ctx, id)
+}
+
 func (h *LedgerQueries) Entries(ctx context.Context, id domain.AccountID, limit, offset int) ([]domain.Entry, error) {
 	return h.repo.GetEntriesPage(ctx, id, limit, offset)
 }

@@ -172,6 +172,9 @@ type errRepo struct {
 }
 
 func (e errRepo) SaveTransaction(context.Context, domain.Transaction) error { return e.err }
+func (e errRepo) GetAccount(context.Context, domain.AccountID) (domain.Account, error) {
+	return domain.Account{}, e.err
+}
 func (e errRepo) SaveReversal(context.Context, domain.TransactionID, domain.Transaction) error {
 	return e.err
 }

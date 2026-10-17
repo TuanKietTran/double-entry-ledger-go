@@ -39,4 +39,9 @@ func TestPostTransactionPayloadBoundIdempotency(t *testing.T) {
 	if got := post(changed); got.Code != http.StatusConflict {
 		t.Fatalf("changed-payload status=%d body=%s, want 409", got.Code, got.Body.String())
 	}
+	stale := strings.Replace(body, `"idempotency_key":"bound"`, `"idempotency_key":"stale"`, 1)
+	stale = strings.Replace(stale, `"entries":`, `"expected_versions":{"`+a.String()+`":0,"`+b.String()+`":0},"entries":`, 1)
+	if got := post(stale); got.Code != http.StatusConflict {
+		t.Fatalf("stale-version status=%d body=%s, want 409", got.Code, got.Body.String())
+	}
 }
