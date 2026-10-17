@@ -83,6 +83,25 @@ func TestPostgresLedger(t *testing.T) {
 		if err := repo.SaveTransaction(ctx, partial); err != nil {
 			t.Fatal(err)
 		}
+		page, err := repo.GetEntriesPage(ctx, cash, 1, 0)
+		if err != nil || len(page) != 1 {
+			t.Fatalf("entry page = %+v, %v", page, err)
+		}
+		asOf, asOfCurrency, err := repo.GetBalanceAsOf(ctx, cash, time.Now().Add(time.Hour))
+		if err != nil || asOfCurrency != "USD" || !asOf.Equal(decimal.RequireFromString("59.75")) {
+			t.Fatalf("as-of balance = %s %s, %v", asOf, asOfCurrency, err)
+		}
+		trial, err := repo.GetTrialBalance(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var total decimal.Decimal
+		for _, row := range trial {
+			total = total.Add(row.Balance)
+		}
+		if !total.IsZero() {
+			t.Fatalf("trial balance total = %s", total)
+		}
 
 		bal, cur, err := repo.GetBalance(ctx, cash)
 		if err != nil {

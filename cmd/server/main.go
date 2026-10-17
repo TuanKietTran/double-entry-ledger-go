@@ -26,7 +26,8 @@ func main() {
 	}
 	createAccountH := command.NewCreateAccountHandler(accountRepo)
 	transactionQueryH := query.NewGetTransactionHandler(repo)
-	handlers := api.NewHandlersWithTransactionQueries(postH, balH, createAccountH, transactionQueryH)
+	ledgerQueriesH := query.NewLedgerQueries(repo)
+	handlers := api.NewHandlersWithTransactionQueries(postH, balH, createAccountH, transactionQueryH, ledgerQueriesH)
 
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)

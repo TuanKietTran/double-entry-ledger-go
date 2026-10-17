@@ -13,9 +13,9 @@ type GetBalanceQuery struct {
 }
 
 type BalanceResult struct {
-	AccountID domain.AccountID
-	Available decimal.Decimal
-	Currency  string
+	AccountID domain.AccountID `json:"account_id"`
+	Available decimal.Decimal  `json:"available"`
+	Currency  string           `json:"currency"`
 }
 
 type GetBalanceHandler struct {

@@ -3,7 +3,9 @@ package repository
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync"
+	"time"
 
 	"github.com/TuanKietTran/double-entry-ledger-go/internal/domain"
 	"github.com/shopspring/decimal"
@@ -76,9 +78,14 @@ func (r *InMemoryLedger) SaveTransaction(ctx context.Context, tx domain.Transact
 	r.transactions[tx.ID] = tx
 	r.idempotency[tx.IdempotencyKey] = tx.ID
 
-	for _, e := range tx.Entries {
+	for i := range tx.Entries {
+		if tx.Entries[i].CreatedAt.IsZero() {
+			tx.Entries[i].CreatedAt = time.Now().UTC()
+		}
+		e := tx.Entries[i]
 		r.entries[e.AccountID] = append(r.entries[e.AccountID], e)
 	}
+	r.transactions[tx.ID] = tx
 	return nil
 }
 
@@ -111,8 +118,10 @@ func (r *InMemoryLedger) GetBalance(ctx context.Context, accountID domain.Accoun
 
 	var bal decimal.Decimal
 	currency := "USD"
+	if account, ok := r.accounts[accountID]; ok {
+		currency = account.Currency
+	}
 	for _, e := range r.entries[accountID] {
-		currency = e.Currency
 		if e.Direction == domain.Debit {
 			bal = bal.Add(e.Amount)
 		} else {
@@ -123,7 +132,68 @@ func (r *InMemoryLedger) GetBalance(ctx context.Context, accountID domain.Accoun
 }
 
 func (r *InMemoryLedger) GetEntries(ctx context.Context, accountID domain.AccountID) ([]domain.Entry, error) {
+	return r.GetEntriesPage(ctx, accountID, int(^uint(0)>>1), 0)
+}
+
+func (r *InMemoryLedger) GetEntriesPage(ctx context.Context, accountID domain.AccountID, limit, offset int) ([]domain.Entry, error) {
+	if limit <= 0 || offset < 0 {
+		return nil, fmt.Errorf("invalid pagination")
+	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.entries[accountID], nil
+	entries := append([]domain.Entry(nil), r.entries[accountID]...)
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].CreatedAt.Equal(entries[j].CreatedAt) {
+			return entries[i].ID.String() < entries[j].ID.String()
+		}
+		return entries[i].CreatedAt.Before(entries[j].CreatedAt)
+	})
+	if offset >= len(entries) {
+		return []domain.Entry{}, nil
+	}
+	end := offset + limit
+	if end > len(entries) {
+		end = len(entries)
+	}
+	return entries[offset:end], nil
+}
+
+func (r *InMemoryLedger) GetBalanceAsOf(ctx context.Context, accountID domain.AccountID, asOf time.Time) (decimal.Decimal, string, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	account, ok := r.accounts[accountID]
+	currency := "USD"
+	if ok {
+		currency = account.Currency
+	}
+	var balance decimal.Decimal
+	for _, e := range r.entries[accountID] {
+		if e.CreatedAt.After(asOf) {
+			continue
+		}
+		if e.Direction == domain.Debit {
+			balance = balance.Add(e.Amount)
+		} else {
+			balance = balance.Sub(e.Amount)
+		}
+	}
+	return balance, currency, nil
+}
+
+func (r *InMemoryLedger) GetTrialBalance(ctx context.Context) ([]AccountBalance, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]AccountBalance, 0, len(r.accounts))
+	for id, account := range r.accounts {
+		var balance decimal.Decimal
+		for _, e := range r.entries[id] {
+			if e.Direction == domain.Debit {
+				balance = balance.Add(e.Amount)
+			} else {
+				balance = balance.Sub(e.Amount)
+			}
+		}
+		out = append(out, AccountBalance{AccountID: id, Currency: account.Currency, Balance: balance})
+	}
+	return out, nil
 }

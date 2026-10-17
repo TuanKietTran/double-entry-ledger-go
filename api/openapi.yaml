@@ -86,6 +86,29 @@ paths:
       responses:
         '200': { description: Transaction and journal entries }
         '404': { description: Transaction not found }
+  /v1/accounts/{id}/entries:
+    get:
+      operationId: getAccountEntries
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 50, minimum: 1, maximum: 500 }
+        - in: query
+          name: offset
+          schema: { type: integer, default: 0, minimum: 0 }
+      responses:
+        '200': { description: Account entries in deterministic order }
+        '400': { description: Invalid account id or pagination }
+  /v1/trial-balance:
+    get:
+      operationId: getTrialBalance
+      responses:
+        '200': { description: Per-account debit-minus-credit balances }
+        '500': { description: Query failed }
   /v1/accounts/{id}/balance:
     get:
       operationId: getAccountBalance
@@ -95,16 +118,15 @@ paths:
           name: id
           required: true
           schema: { type: string, format: uuid }
+        - in: query
+          name: as_of
+          description: Optional RFC3339 timestamp; returns balance through that instant.
+          schema: { type: string, format: date-time }
       responses:
-        '200': { description: Current account balance }
+        '200': { description: Current or as-of account balance }
         '400': { description: Account id is not a UUID }
         '500': { description: Balance query failed }
 x-planned-capabilities:
   description: Not implemented in this API version; these routes are roadmap only.
   items:
-    - GET /v1/accounts/{id}/entries
-    - GET /v1/accounts/{id}/balance?as_of={timestamp}
-    - GET /v1/trial-balance
-    - GET /v1/transactions/{id}
-    - GET /v1/transactions/by-idempotency-key/{key}
     - POST /v1/transactions/{id}/reversals

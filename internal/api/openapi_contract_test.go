@@ -24,10 +24,12 @@ func TestOpenAPIListsCurrentRoutesAndStatuses(t *testing.T) {
 		"GET /transactions/{id}":                     "  /v1/transactions/{id}:\n    get:",
 		"GET /transactions/by-idempotency-key/{key}": "  /v1/transactions/by-idempotency-key/{key}:\n    get:",
 		"GET /accounts/{id}/balance":                 "  /v1/accounts/{id}/balance:\n    get:",
+		"GET /accounts/{id}/entries":                 "  /v1/accounts/{id}/entries:\n    get:",
+		"GET /trial-balance":                         "  /v1/trial-balance:\n    get:",
 	}
 	registered := map[string]bool{}
 	mem := repository.NewInMemoryLedger()
-	handlers := NewHandlersWithTransactionQueries(nil, nil, command.NewCreateAccountHandler(mem), query.NewGetTransactionHandler(mem))
+	handlers := NewHandlersWithTransactionQueries(nil, nil, command.NewCreateAccountHandler(mem), query.NewGetTransactionHandler(mem), query.NewLedgerQueries(mem))
 	if err := chi.Walk(handlers.Routes(), func(method string, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
 		registered[method+" "+route] = true
 		return nil

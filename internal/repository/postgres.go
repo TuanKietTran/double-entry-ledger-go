@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/TuanKietTran/double-entry-ledger-go/internal/domain"
 	"github.com/google/uuid"
@@ -140,7 +141,7 @@ func (r *PostgresLedger) getTransaction(ctx context.Context, sql string, arg any
 	if err := r.pool.QueryRow(ctx, sql, arg).Scan(&tx.ID, &tx.IdempotencyKey, &tx.Description, &tx.Status); err != nil {
 		return domain.Transaction{}, err
 	}
-	entries, err := r.pool.Query(ctx, `SELECT id, transaction_id, account_id, amount::text, direction, currency FROM entries WHERE transaction_id = $1 ORDER BY id`, tx.ID)
+	entries, err := r.pool.Query(ctx, `SELECT id, transaction_id, account_id, amount::text, direction, currency, created_at FROM entries WHERE transaction_id = $1 ORDER BY id`, tx.ID)
 	if err != nil {
 		return domain.Transaction{}, err
 	}
@@ -148,7 +149,7 @@ func (r *PostgresLedger) getTransaction(ctx context.Context, sql string, arg any
 	for entries.Next() {
 		var entry domain.Entry
 		var amount, direction string
-		if err := entries.Scan(&entry.ID, &entry.TransactionID, &entry.AccountID, &amount, &direction, &entry.Currency); err != nil {
+		if err := entries.Scan(&entry.ID, &entry.TransactionID, &entry.AccountID, &amount, &direction, &entry.Currency, &entry.CreatedAt); err != nil {
 			return domain.Transaction{}, err
 		}
 		entry.Amount, err = decimal.NewFromString(amount)
@@ -161,21 +162,64 @@ func (r *PostgresLedger) getTransaction(ctx context.Context, sql string, arg any
 	return tx, entries.Err()
 }
 
+func (r *PostgresLedger) GetEntriesPage(ctx context.Context, accountID domain.AccountID, limit, offset int) ([]domain.Entry, error) {
+	if limit <= 0 || offset < 0 {
+		return nil, fmt.Errorf("invalid pagination")
+	}
+	rows, err := r.pool.Query(ctx, `SELECT id, transaction_id, account_id, amount::text, direction, currency, created_at FROM entries WHERE account_id = $1 ORDER BY created_at, id LIMIT $2 OFFSET $3`, accountID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanEntries(rows)
+}
+
+func (r *PostgresLedger) GetBalanceAsOf(ctx context.Context, accountID domain.AccountID, asOf time.Time) (decimal.Decimal, string, error) {
+	var amountText, currency string
+	err := r.pool.QueryRow(ctx, `SELECT COALESCE(SUM(CASE WHEN e.direction = 'DEBIT' THEN e.amount ELSE -e.amount END), 0)::text, a.currency FROM accounts a LEFT JOIN entries e ON e.account_id = a.id AND e.created_at <= $2 WHERE a.id = $1 GROUP BY a.currency`, accountID, asOf).Scan(&amountText, &currency)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return decimal.Zero, "USD", nil
+	}
+	if err != nil {
+		return decimal.Zero, "", err
+	}
+	balance, err := decimal.NewFromString(amountText)
+	return balance, currency, err
+}
+
+func (r *PostgresLedger) GetTrialBalance(ctx context.Context) ([]AccountBalance, error) {
+	rows, err := r.pool.Query(ctx, `SELECT a.id, a.currency, COALESCE(SUM(CASE WHEN e.direction = 'DEBIT' THEN e.amount ELSE -e.amount END), 0)::text FROM accounts a LEFT JOIN entries e ON e.account_id = a.id GROUP BY a.id, a.currency ORDER BY a.id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []AccountBalance
+	for rows.Next() {
+		var row AccountBalance
+		var amount string
+		if err := rows.Scan(&row.AccountID, &row.Currency, &amount); err != nil {
+			return nil, err
+		}
+		row.Balance, err = decimal.NewFromString(amount)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, row)
+	}
+	return out, rows.Err()
+}
+
 func (r *PostgresLedger) GetBalance(ctx context.Context, accountID domain.AccountID) (decimal.Decimal, string, error) {
 	var amountText string
 	var currency *string
 	err := r.pool.QueryRow(ctx, `
-		SELECT
-			COALESCE(SUM(CASE WHEN direction = 'DEBIT' THEN amount ELSE -amount END), 0)::text,
-			(
-				SELECT currency FROM entries
-				WHERE account_id = $1
-				ORDER BY created_at DESC, id DESC
-				LIMIT 1
-			)
-		FROM entries
-		WHERE account_id = $1
+		SELECT COALESCE(SUM(CASE WHEN e.direction = 'DEBIT' THEN e.amount ELSE -e.amount END), 0)::text, a.currency
+		FROM accounts a LEFT JOIN entries e ON e.account_id = a.id
+		WHERE a.id = $1 GROUP BY a.currency
 	`, accountID).Scan(&amountText, &currency)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return decimal.Zero, "USD", nil
+	}
 	if err != nil {
 		return decimal.Zero, "", err
 	}
@@ -190,9 +234,27 @@ func (r *PostgresLedger) GetBalance(ctx context.Context, accountID domain.Accoun
 	return bal, cur, nil
 }
 
+func scanEntries(rows pgx.Rows) ([]domain.Entry, error) {
+	var out []domain.Entry
+	for rows.Next() {
+		var e domain.Entry
+		var amountText, direction string
+		if err := rows.Scan(&e.ID, &e.TransactionID, &e.AccountID, &amountText, &direction, &e.Currency, &e.CreatedAt); err != nil {
+			return nil, err
+		}
+		amount, err := decimal.NewFromString(amountText)
+		if err != nil {
+			return nil, fmt.Errorf("parse amount: %w", err)
+		}
+		e.Amount, e.Direction = amount, domain.Direction(direction)
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
 func (r *PostgresLedger) GetEntries(ctx context.Context, accountID domain.AccountID) ([]domain.Entry, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, transaction_id, account_id, amount::text, direction, currency
+		SELECT id, transaction_id, account_id, amount::text, direction, currency, created_at
 		FROM entries
 		WHERE account_id = $1
 		ORDER BY created_at ASC, id ASC
@@ -206,7 +268,7 @@ func (r *PostgresLedger) GetEntries(ctx context.Context, accountID domain.Accoun
 	for rows.Next() {
 		var e domain.Entry
 		var amountText, direction string
-		if err := rows.Scan(&e.ID, &e.TransactionID, &e.AccountID, &amountText, &direction, &e.Currency); err != nil {
+		if err := rows.Scan(&e.ID, &e.TransactionID, &e.AccountID, &amountText, &direction, &e.Currency, &e.CreatedAt); err != nil {
 			return nil, err
 		}
 		amt, err := decimal.NewFromString(amountText)

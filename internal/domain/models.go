@@ -2,6 +2,7 @@ package domain
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
@@ -42,6 +43,7 @@ type Account struct {
 
 type Entry struct {
 	ID            uuid.UUID
+	CreatedAt     time.Time
 	TransactionID TransactionID
 	AccountID     AccountID
 	Amount        decimal.Decimal
