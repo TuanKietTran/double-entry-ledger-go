@@ -14,6 +14,8 @@ type AccountRepository interface {
 
 type LedgerRepository interface {
 	SaveTransaction(ctx context.Context, tx domain.Transaction) error
+	GetTransaction(ctx context.Context, id domain.TransactionID) (domain.Transaction, error)
+	GetTransactionByIdempotencyKey(ctx context.Context, key string) (domain.Transaction, error)
 	GetBalance(ctx context.Context, accountID domain.AccountID) (decimal.Decimal, string, error)
 	GetEntries(ctx context.Context, accountID domain.AccountID) ([]domain.Entry, error)
 }

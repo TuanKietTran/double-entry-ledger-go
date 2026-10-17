@@ -59,6 +59,14 @@ func TestPostgresLedger(t *testing.T) {
 		if err := repo.SaveTransaction(ctx, tx); err != nil {
 			t.Fatal(err)
 		}
+		lookup, err := repo.GetTransaction(ctx, tx.ID)
+		if err != nil || lookup.IdempotencyKey != tx.IdempotencyKey || len(lookup.Entries) != 2 {
+			t.Fatalf("transaction lookup = %+v, %v", lookup, err)
+		}
+		byKey, err := repo.GetTransactionByIdempotencyKey(ctx, tx.IdempotencyKey)
+		if err != nil || byKey.ID != tx.ID {
+			t.Fatalf("key lookup = %+v, %v", byKey, err)
+		}
 
 		partial := domain.Transaction{
 			ID:             uuid.New(),

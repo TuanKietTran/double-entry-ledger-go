@@ -13,9 +13,10 @@ import (
 )
 
 type Handlers struct {
-	postTx        *command.PostTransactionHandler
-	getBal        *query.GetBalanceHandler
-	createAccount *command.CreateAccountHandler
+	postTx         *command.PostTransactionHandler
+	getBal         *query.GetBalanceHandler
+	createAccount  *command.CreateAccountHandler
+	getTransaction *query.GetTransactionHandler
 }
 
 func NewHandlers(post *command.PostTransactionHandler, bal *query.GetBalanceHandler, accounts ...*command.CreateAccountHandler) *Handlers {
@@ -26,12 +27,22 @@ func NewHandlers(post *command.PostTransactionHandler, bal *query.GetBalanceHand
 	return h
 }
 
+func NewHandlersWithTransactionQueries(post *command.PostTransactionHandler, bal *query.GetBalanceHandler, accounts *command.CreateAccountHandler, transactions *query.GetTransactionHandler) *Handlers {
+	h := NewHandlers(post, bal, accounts)
+	h.getTransaction = transactions
+	return h
+}
+
 func (h *Handlers) Routes() chi.Router {
 	r := chi.NewRouter()
 	r.Post("/transactions", h.postTransaction)
 	r.Get("/accounts/{id}/balance", h.getBalance)
 	if h.createAccount != nil {
 		r.Post("/accounts", h.createAccountRoute)
+	}
+	if h.getTransaction != nil {
+		r.Get("/transactions/{id}", h.getTransactionByID)
+		r.Get("/transactions/by-idempotency-key/{key}", h.getTransactionByKey)
 	}
 	return r
 }
@@ -114,6 +125,50 @@ func (h *Handlers) postTransaction(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"transaction_id": id.String()})
+}
+
+type transactionResponse struct {
+	TransactionID  string          `json:"transaction_id"`
+	IdempotencyKey string          `json:"idempotency_key"`
+	Description    string          `json:"description"`
+	Status         string          `json:"status"`
+	Entries        []entryResponse `json:"entries"`
+}
+
+type entryResponse struct {
+	EntryID   string `json:"entry_id"`
+	AccountID string `json:"account_id"`
+	Amount    string `json:"amount"`
+	Direction string `json:"direction"`
+	Currency  string `json:"currency"`
+}
+
+func (h *Handlers) writeTransaction(w http.ResponseWriter, r *http.Request, tx domain.Transaction, err error) {
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	response := transactionResponse{TransactionID: tx.ID.String(), IdempotencyKey: tx.IdempotencyKey, Description: tx.Description, Status: tx.Status}
+	for _, entry := range tx.Entries {
+		response.Entries = append(response.Entries, entryResponse{EntryID: entry.ID.String(), AccountID: entry.AccountID.String(), Amount: entry.Amount.String(), Direction: string(entry.Direction), Currency: entry.Currency})
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(response)
+}
+
+func (h *Handlers) getTransactionByID(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.Error(w, "invalid transaction id", http.StatusBadRequest)
+		return
+	}
+	tx, err := h.getTransaction.ByID(r.Context(), id)
+	h.writeTransaction(w, r, tx, err)
+}
+
+func (h *Handlers) getTransactionByKey(w http.ResponseWriter, r *http.Request) {
+	tx, err := h.getTransaction.ByIdempotencyKey(r.Context(), chi.URLParam(r, "key"))
+	h.writeTransaction(w, r, tx, err)
 }
 
 func (h *Handlers) getBalance(w http.ResponseWriter, r *http.Request) {

@@ -127,6 +127,40 @@ func (r *PostgresLedger) SaveTransaction(ctx context.Context, tx domain.Transact
 	return dbTx.Commit(ctx)
 }
 
+func (r *PostgresLedger) GetTransaction(ctx context.Context, id domain.TransactionID) (domain.Transaction, error) {
+	return r.getTransaction(ctx, `SELECT id, idempotency_key, COALESCE(description, ''), status FROM transactions WHERE id = $1`, id)
+}
+
+func (r *PostgresLedger) GetTransactionByIdempotencyKey(ctx context.Context, key string) (domain.Transaction, error) {
+	return r.getTransaction(ctx, `SELECT id, idempotency_key, COALESCE(description, ''), status FROM transactions WHERE idempotency_key = $1`, key)
+}
+
+func (r *PostgresLedger) getTransaction(ctx context.Context, sql string, arg any) (domain.Transaction, error) {
+	var tx domain.Transaction
+	if err := r.pool.QueryRow(ctx, sql, arg).Scan(&tx.ID, &tx.IdempotencyKey, &tx.Description, &tx.Status); err != nil {
+		return domain.Transaction{}, err
+	}
+	entries, err := r.pool.Query(ctx, `SELECT id, transaction_id, account_id, amount::text, direction, currency FROM entries WHERE transaction_id = $1 ORDER BY id`, tx.ID)
+	if err != nil {
+		return domain.Transaction{}, err
+	}
+	defer entries.Close()
+	for entries.Next() {
+		var entry domain.Entry
+		var amount, direction string
+		if err := entries.Scan(&entry.ID, &entry.TransactionID, &entry.AccountID, &amount, &direction, &entry.Currency); err != nil {
+			return domain.Transaction{}, err
+		}
+		entry.Amount, err = decimal.NewFromString(amount)
+		if err != nil {
+			return domain.Transaction{}, err
+		}
+		entry.Direction = domain.Direction(direction)
+		tx.Entries = append(tx.Entries, entry)
+	}
+	return tx, entries.Err()
+}
+
 func (r *PostgresLedger) GetBalance(ctx context.Context, accountID domain.AccountID) (decimal.Decimal, string, error) {
 	var amountText string
 	var currency *string

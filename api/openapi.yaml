@@ -63,6 +63,29 @@ paths:
                 properties:
                   transaction_id: { type: string, format: uuid }
         '400': { description: Invalid JSON, account id, unbalanced post, or reused idempotency key }
+  /v1/transactions/{id}:
+    get:
+      operationId: getTransactionByID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Transaction and journal entries }
+        '400': { description: Invalid transaction UUID }
+        '404': { description: Transaction not found }
+  /v1/transactions/by-idempotency-key/{key}:
+    get:
+      operationId: getTransactionByIdempotencyKey
+      parameters:
+        - in: path
+          name: key
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Transaction and journal entries }
+        '404': { description: Transaction not found }
   /v1/accounts/{id}/balance:
     get:
       operationId: getAccountBalance

@@ -82,6 +82,29 @@ func (r *InMemoryLedger) SaveTransaction(ctx context.Context, tx domain.Transact
 	return nil
 }
 
+func (r *InMemoryLedger) GetTransaction(ctx context.Context, id domain.TransactionID) (domain.Transaction, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	tx, ok := r.transactions[id]
+	if !ok {
+		return domain.Transaction{}, fmt.Errorf("transaction not found")
+	}
+	tx.Entries = append([]domain.Entry(nil), tx.Entries...)
+	return tx, nil
+}
+
+func (r *InMemoryLedger) GetTransactionByIdempotencyKey(ctx context.Context, key string) (domain.Transaction, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	id, ok := r.idempotency[key]
+	if !ok {
+		return domain.Transaction{}, fmt.Errorf("transaction not found")
+	}
+	tx := r.transactions[id]
+	tx.Entries = append([]domain.Entry(nil), tx.Entries...)
+	return tx, nil
+}
+
 func (r *InMemoryLedger) GetBalance(ctx context.Context, accountID domain.AccountID) (decimal.Decimal, string, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

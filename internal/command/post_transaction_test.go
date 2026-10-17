@@ -168,6 +168,12 @@ type errRepo struct {
 }
 
 func (e errRepo) SaveTransaction(context.Context, domain.Transaction) error { return e.err }
+func (e errRepo) GetTransaction(context.Context, domain.TransactionID) (domain.Transaction, error) {
+	return domain.Transaction{}, e.err
+}
+func (e errRepo) GetTransactionByIdempotencyKey(context.Context, string) (domain.Transaction, error) {
+	return domain.Transaction{}, e.err
+}
 func (e errRepo) GetBalance(context.Context, domain.AccountID) (decimal.Decimal, string, error) {
 	return decimal.Zero, "", e.err
 }
