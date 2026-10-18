@@ -22,7 +22,8 @@ See OpenAPI contract: accounts, transactions, reversal, entries, balances/as-of,
 
 | 2026-10-18 | Independent PostgreSQL connection conflicts (parent `197142b`) | `go test -p 2 ./internal/repository -run TestPostgresLedger -race -count=1 -v` PASS 49.005s on Go 1.27.1 darwin/arm64; replay, payload/version conflicts, unique reversal and timestamp tie pages. Full format/build/vet/race/tidy gates passed; repository 85.2%, weighted internal 87.6% with `-coverpkg=./internal/... -coverprofile=/tmp/ledger-macos-concurrency.cover` and `go tool cover -func=/tmp/ledger-macos-concurrency.cover`. |
 | 2026-10-18 | JSON panic recovery and real-process smoke (parent `2a70ad1`) | `api.Recoverer` unit tests; built-binary smoke via `ctl/scripts/ledger-smoke.sh` PASS (health, readiness, create, post, replay, 409 conflict, balance, request ID, SIGTERM exit 0), in-memory mode only. Gates passed in `341f6da` run: API 91.5%, cmd 43.1%. |
+| 2026-10-19 | PostgreSQL-mode real-process smoke (parent `bb8beca`) | `ctl/scripts/ledger-pg-smoke.sh` PASS: cached embedded PG 16.9 loopback, migrations 001/002 applied externally, built binary; readiness, post, replay, 409, balance, entries, restart persistence, SIGTERM exit 0 twice. Log `ctl/logs/ledger/macos-pg-smoke.txt`. |
 
 ## Scope notes
 
-No downstream service is consumed. Cursor pagination, PostgreSQL-mode process probes, and exhaustive OpenAPI semantic validation remain incomplete; response structure checks now cover all declared response schemas and representative runtime bodies. See DoD. See `openspec/gifs/playback-flow.gif` as legacy storyboard only.
+No downstream service is consumed. Cursor pagination, load and Linux/CI process probes, and exhaustive OpenAPI semantic validation remain incomplete; response structure checks now cover all declared response schemas and representative runtime bodies. See DoD. See `openspec/gifs/playback-flow.gif` as legacy storyboard only.
