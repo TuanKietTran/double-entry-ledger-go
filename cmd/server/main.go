@@ -20,7 +20,6 @@ import (
 	"github.com/TuanKietTran/double-entry-ledger-go/internal/query"
 	"github.com/TuanKietTran/double-entry-ledger-go/internal/repository"
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 )
 
 type config struct {
@@ -56,7 +55,7 @@ func buildRouter(repo repository.LedgerRepository) http.Handler {
 	}
 	apiHandlers := api.NewHandlersWithLedger(postH, balH, command.NewCreateAccountHandler(accounts), query.NewGetTransactionHandler(repo), query.NewLedgerQueries(repo), command.NewReverseTransactionHandler(repo))
 	r := chi.NewRouter()
-	r.Use(middleware.Recoverer)
+	r.Use(api.Recoverer)
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) { requestCount.Add(1); next.ServeHTTP(w, req) })
 	})

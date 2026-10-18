@@ -28,6 +28,21 @@ func requestIDMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// Recoverer assigns a request ID and converts handler panics into the JSON error envelope.
+func Recoverer(next http.Handler) http.Handler {
+	return requestIDMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if rec := recover(); rec != nil {
+				if rec == http.ErrAbortHandler {
+					panic(rec)
+				}
+				writeError(w, r, "internal server error", http.StatusInternalServerError)
+			}
+		}()
+		next.ServeHTTP(w, r)
+	}))
+}
+
 func writeError(w http.ResponseWriter, r *http.Request, message string, status int) {
 	requestID := strings.TrimSpace(r.Header.Get("X-Request-ID"))
 	if requestID == "" {
