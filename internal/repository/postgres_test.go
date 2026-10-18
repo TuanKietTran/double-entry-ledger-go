@@ -43,6 +43,13 @@ func TestPostgresLedger(t *testing.T) {
 		t.Fatalf("reversal migrate: %v", err)
 	}
 
+	t.Run("independent connection conflicts", func(t *testing.T) {
+		testPostgresIndependentConnections(t, repo, dsn)
+	})
+	t.Run("timestamp tie pagination", func(t *testing.T) {
+		testPostgresTimestampTiePagination(t, repo)
+	})
+
 	t.Run("balance and entries", func(t *testing.T) {
 		cash := uuid.New()
 		revenue := uuid.New()

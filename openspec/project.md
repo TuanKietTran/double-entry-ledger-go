@@ -18,7 +18,9 @@ See OpenAPI contract: accounts, transactions, reversal, entries, balances/as-of,
 | 2026-10-17 | Playback baseline | 1000 posts plus retry, 83ms in playback test; regression evidence only, not real-process throughput. |
 | 2026-10-18 | Production ledger contract and implementation | `31f6879`; `go test -p 2 ./... -race -count=1 -cover` passed; package coverage cmd 43.1%, API 80.8%, command 94.4%, domain 93.7%, playback 63.5%, query 100.0%, repository 83.5%. Weighted internal 84.0% measured at card 5d. OpenAPI parsed and route/status contract test passes. |
 
-| 2026-10-18 | Response schemas and macOS verification (parent `6df3c8a`) | `go test ./internal/api -count=1`; full build/vet/race/tidy gates on Go 1.27.1 darwin/arm64 passed; API 90.7%, domain 93.7%, repository 84.9%; weighted internal 87.4% via `go test -p 2 ./... -race -count=1 -coverpkg=./internal/... -coverprofile=/tmp/ledger-macos-response.cover` and `go tool cover -func=/tmp/ledger-macos-response.cover`. |
+| 2026-10-18 | Response schemas and macOS verification `197142b` | `go test ./internal/api -count=1`; full build/vet/race/tidy gates on Go 1.27.1 darwin/arm64 passed; API 90.7%, domain 93.7%, repository 84.9%; weighted internal 87.4% via `go test -p 2 ./... -race -count=1 -coverpkg=./internal/... -coverprofile=/tmp/ledger-macos-response.cover` and `go tool cover -func=/tmp/ledger-macos-response.cover`. |
+
+| 2026-10-18 | Independent PostgreSQL connection conflicts (parent `197142b`) | `go test -p 2 ./internal/repository -run TestPostgresLedger -race -count=1 -v` PASS 49.005s on Go 1.27.1 darwin/arm64; replay, payload/version conflicts, unique reversal and timestamp tie pages. Full format/build/vet/race/tidy gates passed; repository 85.2%, weighted internal 87.6% with `-coverpkg=./internal/... -coverprofile=/tmp/ledger-macos-concurrency.cover` and `go tool cover -func=/tmp/ledger-macos-concurrency.cover`. |
 
 ## Scope notes
 

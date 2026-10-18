@@ -38,6 +38,19 @@ A write key SHALL bind to a canonical payload. Repeating the same key and payloa
 ### Requirement: Memory and Postgres parity
 Memory and Postgres adapters SHALL implement the same account, transaction, idempotency, conflict, and query semantics, with atomic writes.
 
+### Requirement: Independent connection conflict safety
+The PostgreSQL adapter MUST preserve journal folds and account versions when independent connections submit concurrent replay, conflicting payloads, stale versions or reversals.
+
+#### Scenario: Conflicting concurrent writes
+- **GIVEN** explicitly provisioned accounts and independent PostgreSQL connections
+- **WHEN** concurrent callers submit a changed-payload key conflict or the same expected account version
+- **THEN** exactly one write commits and the losing write changes neither entries nor account versions.
+
+#### Scenario: Tied entry timestamps
+- **GIVEN** account entries with the same creation timestamp
+- **WHEN** offset pages are read without concurrent appends
+- **THEN** the page concatenation equals the full result ordered by timestamp then entry UUID.
+
 ### Requirement: Explicit account provisioning
 Clients SHALL provision accounts through `POST /v1/accounts` before posting to them. Repeating the identical account identity and immutable attributes SHALL succeed without creating a duplicate; reusing an identity with different owner, currency, type, or status SHALL conflict. Posting SHALL NOT create missing account rows as a side effect.
 

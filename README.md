@@ -20,7 +20,7 @@ flowchart LR
 
 ## Run
 
-Go 1.22+; Docker is not required. With `DATABASE_URL` unset the server uses memory. With it set the server uses Postgres and applies the SQL migrations before serving. Default listener is `:8101`; override with `HTTP_ADDR`.
+Go 1.22+; Docker is not required. With `DATABASE_URL` unset the server uses memory. With it set the server uses Postgres; apply `migrations/001_init.sql` and `migrations/002_reversals.sql` to that database first (the server does not run migrations). Default listener is `:8101`; override with `HTTP_ADDR`.
 
 ```sh
 go test ./...
@@ -52,7 +52,7 @@ Current routes: account provision/read, transaction post/lookup by ID or idempot
 
 ## Measured status
 
-Evidence from `go test -p 2 ./... -race -count=1 -cover` on 2026-10-18 with Go 1.27.1, macOS arm64 (non-root): API 90.7%, command 94.7%, domain 93.7%, playback 63.5%, query 100.0%, repository 84.9%, cmd 43.1%. Embedded PostgreSQL tests also passed in this macOS run. `TestPostgresLedger` (embedded Postgres, seven subtests) was run natively on Windows with `go test -p 2 ./internal/repository -run TestPostgresLedger -race -count=1 -v` and passed (28.03s, 2026-10-18; log in the control folder under `logs/ledger/pg-worker-run.txt`). The test skips only when the process runs as root (`os.Geteuid()==0`), which does not apply to that run. Simultaneous multi-connection DB conflicts remain unverified. These package percentages are not an aggregate; weighted internal coverage was measured at 87.4% with `go test -p 2 ./... -race -count=1 -coverpkg=./internal/... -coverprofile=/tmp/ledger-macos-response.cover` and `go tool cover -func=/tmp/ledger-macos-response.cover`. Response contract tests check published property sets, required fields and representative handler bodies (JSON types/enums/references); they are not a complete OpenAPI semantic validator.
+Evidence from `go test -p 2 ./... -race -count=1 -cover` on 2026-10-18 with Go 1.27.1, macOS arm64 (non-root): API 90.7%, command 94.7%, domain 93.7%, playback 63.5%, query 100.0%, repository 85.2%, cmd 43.1%. Embedded PostgreSQL tests also passed in this macOS run. `TestPostgresLedger` (embedded Postgres, seven subtests) was run natively on Windows with `go test -p 2 ./internal/repository -run TestPostgresLedger -race -count=1 -v` and passed (28.03s, 2026-10-18; log in the control folder under `logs/ledger/pg-worker-run.txt`). The test skips only when the process runs as root (`os.Geteuid()==0`), which does not apply to that run. The subsequent macOS command `go test -p 2 ./internal/repository -run TestPostgresLedger -race -count=1 -v` passed (49.005s, 2026-10-18), including independent-connection replay, changed-payload/version conflicts, competing reversals and timestamp-tied pagination. Tests assert balances equal entry folds and only committed writes advance versions. This is bounded concurrency evidence, not exhaustive database failure testing. These package percentages are not an aggregate; weighted internal coverage was measured at 87.6% with `go test -p 2 ./... -race -count=1 -coverpkg=./internal/... -coverprofile=/tmp/ledger-macos-concurrency.cover` and `go tool cover -func=/tmp/ledger-macos-concurrency.cover`. Response contract tests check published property sets, required fields and representative handler bodies (JSON types/enums/references); they are not a complete OpenAPI semantic validator.
 
 ## Design decisions
 
