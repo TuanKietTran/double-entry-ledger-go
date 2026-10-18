@@ -9,6 +9,15 @@ The service SHALL publish an OpenAPI contract that lists only implemented routes
 - **THEN** every registered route and method appears in OpenAPI with its implemented success and error statuses
 - **AND** no planned-only route appears under `paths`
 
+### Requirement: Published response shapes
+Every implemented operation MUST declare an application/json success schema and every declared error status MUST reference the shared error envelope.
+
+#### Scenario: Handler output matches the contract
+- **GIVEN** provisioned accounts and a balanced transaction
+- **WHEN** posting, looking up, reversing, or querying through the HTTP handlers
+- **THEN** representative responses contain the documented required properties with the declared JSON types
+- **AND** representative invalid requests return the shared error envelope.
+
 ### Requirement: Explicit account and journal model
 The ledger SHALL provision accounts explicitly with immutable type and currency and an explicit active status. A posted transaction SHALL contain at least two positive exact-amount entries, use recognized directions, and use one explicit currency across all legs. The sum of debit amounts SHALL equal the sum of credit amounts.
 

@@ -25,8 +25,12 @@ paths:
                 currency: { type: string, pattern: '^[A-Z]{3}$' }
                 type: { type: string, enum: [ASSET, LIABILITY, EQUITY, REVENUE, EXPENSE] }
       responses:
-        '201': { description: Account created or identical account already exists }
-        '400': { description: Invalid account attributes or ID conflict }
+        '201':
+          description: Account created or identical account already exists
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccountCreated' }
+        '400': { $ref: '#/components/responses/BadRequest' }
   /v1/transactions:
     post:
       operationId: postTransaction
@@ -63,13 +67,9 @@ paths:
           description: Transaction posted
           content:
             application/json:
-              schema:
-                type: object
-                required: [transaction_id]
-                properties:
-                  transaction_id: { type: string, format: uuid }
-        '400': { description: Invalid JSON, account id, direction, or journal invariants }
-        '409': { description: Idempotency payload conflict or stale account version }
+              schema: { $ref: '#/components/schemas/TransactionCreated' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
   /v1/transactions/{id}:
     get:
       operationId: getTransactionByID
@@ -79,9 +79,13 @@ paths:
           required: true
           schema: { type: string, format: uuid }
       responses:
-        '200': { description: Transaction and journal entries }
-        '400': { description: Invalid transaction UUID }
-        '404': { description: Transaction not found }
+        '200':
+          description: Transaction and journal entries
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Transaction' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /v1/transactions/by-idempotency-key/{key}:
     get:
       operationId: getTransactionByIdempotencyKey
@@ -91,8 +95,12 @@ paths:
           required: true
           schema: { type: string }
       responses:
-        '200': { description: Transaction and journal entries }
-        '404': { description: Transaction not found }
+        '200':
+          description: Transaction and journal entries
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Transaction' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /v1/transactions/{id}/reversals:
     post:
       operationId: reverseTransaction
@@ -111,9 +119,13 @@ paths:
               properties:
                 idempotency_key: { type: string }
       responses:
-        '200': { description: Reversal transaction ID; retries return the original result }
-        '400': { description: Invalid original transaction or reversal request }
-        '409': { description: Idempotency key payload conflict }
+        '200':
+          description: Reversal transaction ID; retries return the original result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TransactionCreated' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
   /v1/accounts/{id}:
     get:
       operationId: getAccount
@@ -123,9 +135,13 @@ paths:
           required: true
           schema: { type: string, format: uuid }
       responses:
-        '200': { description: Account definition and current concurrency version }
-        '400': { description: Invalid account UUID }
-        '404': { description: Account not found }
+        '200':
+          description: Account definition and current concurrency version
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Account' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /v1/accounts/{id}/entries:
     get:
       operationId: getAccountEntries
@@ -141,14 +157,26 @@ paths:
           name: offset
           schema: { type: integer, default: 0, minimum: 0 }
       responses:
-        '200': { description: Account entries in deterministic order }
-        '400': { description: Invalid account id or pagination }
+        '200':
+          description: Account entries in deterministic offset order; concurrent appends may shift pages
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Entry' }
+        '400': { $ref: '#/components/responses/BadRequest' }
   /v1/trial-balance:
     get:
       operationId: getTrialBalance
       responses:
-        '200': { description: Per-account debit-minus-credit balances }
-        '500': { description: Query failed }
+        '200':
+          description: Per-account debit-minus-credit balances
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/TrialBalanceRow' }
+        '500': { $ref: '#/components/responses/InternalError' }
   /v1/accounts/{id}/balance:
     get:
       operationId: getAccountBalance
@@ -163,11 +191,92 @@ paths:
           description: Optional RFC3339 timestamp; returns balance through that instant.
           schema: { type: string, format: date-time }
       responses:
-        '200': { description: Current or as-of account balance }
-        '400': { description: Account id is not a UUID }
-        '500': { description: Balance query failed }
+        '200':
+          description: Current or as-of account balance
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Balance' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '500': { $ref: '#/components/responses/InternalError' }
 components:
+  responses:
+    BadRequest:
+      description: Invalid request or domain invariant
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    NotFound:
+      description: Requested resource not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    Conflict:
+      description: Idempotency payload conflict or stale account version
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    InternalError:
+      description: Repository query failed
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
   schemas:
+    AccountCreated:
+      type: object
+      required: [account_id]
+      properties:
+        account_id: { type: string, format: uuid }
+    TransactionCreated:
+      type: object
+      required: [transaction_id]
+      properties:
+        transaction_id: { type: string, format: uuid }
+    Account:
+      type: object
+      required: [account_id, owner_id, currency, type, status, version]
+      properties:
+        account_id: { type: string, format: uuid }
+        owner_id: { type: string }
+        currency: { type: string }
+        type: { type: string, enum: [ASSET, LIABILITY, EQUITY, REVENUE, EXPENSE] }
+        status: { type: string, enum: [ACTIVE, INACTIVE] }
+        version: { type: integer, format: int64, minimum: 0 }
+    Entry:
+      type: object
+      required: [entry_id, account_id, created_at, amount, direction, currency]
+      properties:
+        entry_id: { type: string, format: uuid }
+        account_id: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+        amount: { type: string, description: Exact decimal }
+        direction: { type: string, enum: [DEBIT, CREDIT] }
+        currency: { type: string }
+    Transaction:
+      type: object
+      required: [transaction_id, idempotency_key, description, status, entries]
+      properties:
+        transaction_id: { type: string, format: uuid }
+        reversal_of: { type: string, format: uuid }
+        idempotency_key: { type: string }
+        description: { type: string }
+        status: { type: string }
+        entries:
+          type: array
+          items: { $ref: '#/components/schemas/Entry' }
+    Balance:
+      type: object
+      required: [account_id, available, currency]
+      properties:
+        account_id: { type: string, format: uuid }
+        available: { type: string, description: Exact debit-minus-credit decimal }
+        currency: { type: string }
+    TrialBalanceRow:
+      type: object
+      required: [account_id, currency, balance]
+      properties:
+        account_id: { type: string, format: uuid }
+        currency: { type: string }
+        balance: { type: string, description: Exact debit-minus-credit decimal }
     ErrorEnvelope:
       type: object
       required: [error, request_id]
