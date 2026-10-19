@@ -193,6 +193,32 @@ func (r *InMemoryLedger) GetEntriesPage(ctx context.Context, accountID domain.Ac
 	return entries[offset:end], nil
 }
 
+func (r *InMemoryLedger) GetEntriesAfter(ctx context.Context, accountID domain.AccountID, limit int, createdAt time.Time, entryID uuid.UUID) ([]domain.Entry, error) {
+	if limit <= 0 {
+		return nil, fmt.Errorf("invalid pagination")
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	entries := append([]domain.Entry(nil), r.entries[accountID]...)
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].CreatedAt.Equal(entries[j].CreatedAt) {
+			return entries[i].ID.String() < entries[j].ID.String()
+		}
+		return entries[i].CreatedAt.Before(entries[j].CreatedAt)
+	})
+	out := make([]domain.Entry, 0, limit)
+	for _, entry := range entries {
+		if entry.CreatedAt.Before(createdAt) || (entry.CreatedAt.Equal(createdAt) && entry.ID.String() <= entryID.String()) {
+			continue
+		}
+		out = append(out, entry)
+		if len(out) == limit {
+			break
+		}
+	}
+	return out, nil
+}
+
 func (r *InMemoryLedger) GetBalanceAsOf(ctx context.Context, accountID domain.AccountID, asOf time.Time) (decimal.Decimal, string, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

@@ -248,6 +248,18 @@ func (r *PostgresLedger) GetEntriesPage(ctx context.Context, accountID domain.Ac
 	return scanEntries(rows)
 }
 
+func (r *PostgresLedger) GetEntriesAfter(ctx context.Context, accountID domain.AccountID, limit int, createdAt time.Time, entryID uuid.UUID) ([]domain.Entry, error) {
+	if limit <= 0 {
+		return nil, fmt.Errorf("invalid pagination")
+	}
+	rows, err := r.pool.Query(ctx, `SELECT id, transaction_id, account_id, amount::text, direction, currency, created_at FROM entries WHERE account_id = $1 AND (created_at, id) > ($2, $3) ORDER BY created_at, id LIMIT $4`, accountID, createdAt, entryID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanEntries(rows)
+}
+
 func (r *PostgresLedger) GetBalanceAsOf(ctx context.Context, accountID domain.AccountID, asOf time.Time) (decimal.Decimal, string, error) {
 	var amountText, currency string
 	err := r.pool.QueryRow(ctx, `SELECT COALESCE(SUM(CASE WHEN e.direction = 'DEBIT' THEN e.amount ELSE -e.amount END), 0)::text, a.currency FROM accounts a LEFT JOIN entries e ON e.account_id = a.id AND e.created_at <= $2 WHERE a.id = $1 GROUP BY a.currency`, accountID, asOf).Scan(&amountText, &currency)

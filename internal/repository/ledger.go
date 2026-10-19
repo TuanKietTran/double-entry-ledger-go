@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/TuanKietTran/double-entry-ledger-go/internal/domain"
+	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 )
 
@@ -28,6 +29,7 @@ type LedgerRepository interface {
 	GetBalance(ctx context.Context, accountID domain.AccountID) (decimal.Decimal, string, error)
 	GetEntries(ctx context.Context, accountID domain.AccountID) ([]domain.Entry, error)
 	GetEntriesPage(ctx context.Context, accountID domain.AccountID, limit, offset int) ([]domain.Entry, error)
+	GetEntriesAfter(ctx context.Context, accountID domain.AccountID, limit int, createdAt time.Time, entryID uuid.UUID) ([]domain.Entry, error)
 	GetBalanceAsOf(ctx context.Context, accountID domain.AccountID, asOf time.Time) (decimal.Decimal, string, error)
 	GetTrialBalance(ctx context.Context) ([]AccountBalance, error)
 }

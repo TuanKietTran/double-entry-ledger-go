@@ -1,10 +1,12 @@
 package api
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/TuanKietTran/double-entry-ledger-go/internal/command"
@@ -282,14 +284,42 @@ func (h *Handlers) getAccountEntries(w http.ResponseWriter, r *http.Request) {
 		}
 		offset = parsed
 	}
+	if limit < 1 {
+		writeError(w, r, "limit must be positive", http.StatusBadRequest)
+		return
+	}
 	if limit > 500 {
 		writeError(w, r, "limit exceeds 500", http.StatusBadRequest)
 		return
 	}
-	entries, err := h.ledgerQueries.Entries(r.Context(), id, limit, offset)
+	if offset < 0 {
+		writeError(w, r, "offset must be non-negative", http.StatusBadRequest)
+		return
+	}
+	var entries []domain.Entry
+	cursor := r.URL.Query().Get("cursor")
+	cursorMode := cursor != "" || r.URL.Query().Get("offset") == ""
+	if cursorMode {
+		createdAt, entryID := time.Time{}, uuid.Nil
+		if cursor != "" {
+			var decodeErr error
+			createdAt, entryID, decodeErr = decodeEntryCursor(cursor)
+			if decodeErr != nil {
+				writeError(w, r, "invalid cursor", http.StatusBadRequest)
+				return
+			}
+		}
+		entries, err = h.ledgerQueries.EntriesAfter(r.Context(), id, limit+1, createdAt, entryID)
+	} else {
+		entries, err = h.ledgerQueries.Entries(r.Context(), id, limit, offset)
+	}
 	if err != nil {
 		writeError(w, r, err.Error(), http.StatusBadRequest)
 		return
+	}
+	if cursorMode && len(entries) > limit {
+		entries = entries[:limit]
+		w.Header().Set("X-Next-Cursor", encodeEntryCursor(entries[len(entries)-1]))
 	}
 	response := make([]entryResponse, 0, len(entries))
 	for _, entry := range entries {
@@ -297,6 +327,31 @@ func (h *Handlers) getAccountEntries(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(response)
+}
+
+func encodeEntryCursor(entry domain.Entry) string {
+	value := entry.CreatedAt.UTC().Format(time.RFC3339Nano) + "|" + entry.ID.String()
+	return base64.RawURLEncoding.EncodeToString([]byte(value))
+}
+
+func decodeEntryCursor(cursor string) (time.Time, uuid.UUID, error) {
+	decoded, err := base64.RawURLEncoding.DecodeString(cursor)
+	if err != nil {
+		return time.Time{}, uuid.Nil, err
+	}
+	parts := strings.Split(string(decoded), "|")
+	if len(parts) != 2 {
+		return time.Time{}, uuid.Nil, errors.New("invalid cursor shape")
+	}
+	createdAt, err := time.Parse(time.RFC3339Nano, parts[0])
+	if err != nil {
+		return time.Time{}, uuid.Nil, err
+	}
+	id, err := uuid.Parse(parts[1])
+	if err != nil {
+		return time.Time{}, uuid.Nil, err
+	}
+	return createdAt, id, nil
 }
 
 func (h *Handlers) getTrialBalance(w http.ResponseWriter, r *http.Request) {

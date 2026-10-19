@@ -193,6 +193,9 @@ func (e errRepo) GetEntries(context.Context, domain.AccountID) ([]domain.Entry, 
 func (e errRepo) GetEntriesPage(context.Context, domain.AccountID, int, int) ([]domain.Entry, error) {
 	return nil, e.err
 }
+func (e errRepo) GetEntriesAfter(context.Context, domain.AccountID, int, time.Time, uuid.UUID) ([]domain.Entry, error) {
+	return nil, e.err
+}
 func (e errRepo) GetBalanceAsOf(context.Context, domain.AccountID, time.Time) (decimal.Decimal, string, error) {
 	return decimal.Zero, "", e.err
 }

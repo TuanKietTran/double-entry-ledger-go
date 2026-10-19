@@ -230,6 +230,22 @@ func testPostgresTimestampTiePagination(t *testing.T, repo *PostgresLedger) {
 	if err != nil || len(all) != 5 {
 		t.Fatalf("all=%d err=%v", len(all), err)
 	}
+	var cursorPaged []domain.Entry
+	cursorAt, cursorID := time.Time{}, uuid.Nil
+	for {
+		page, err := repo.GetEntriesAfter(ctx, a, 2, cursorAt, cursorID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cursorPaged = append(cursorPaged, page...)
+		if len(page) < 2 {
+			break
+		}
+		cursorAt, cursorID = page[len(page)-1].CreatedAt, page[len(page)-1].ID
+	}
+	if len(cursorPaged) != len(want) {
+		t.Fatalf("cursor paged %d; want %d", len(cursorPaged), len(want))
+	}
 	var paged []domain.Entry
 	for offset := 0; offset < 6; offset += 2 {
 		page, err := repo.GetEntriesPage(ctx, a, 2, offset)
@@ -242,7 +258,7 @@ func testPostgresTimestampTiePagination(t *testing.T, repo *PostgresLedger) {
 		t.Fatalf("paged %d; want %d", len(paged), len(want))
 	}
 	for i, id := range want {
-		if all[i].ID != id || paged[i].ID != id {
+		if all[i].ID != id || paged[i].ID != id || cursorPaged[i].ID != id {
 			t.Fatalf("unexpected tie order at %d", i)
 		}
 		if !all[i].CreatedAt.Equal(all[0].CreatedAt) {
