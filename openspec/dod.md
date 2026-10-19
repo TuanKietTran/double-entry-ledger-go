@@ -12,7 +12,7 @@ This status covers repository tests and the in-memory HTTP runtime only. No prod
 | Stable cursor entry paging plus legacy offset compatibility | `TestCursorPaginationContinuesAcrossConcurrentAppend`, `testPostgresTimestampTiePagination`, and OpenAPI route/schema tests. |
 | R1 loopback HTTP replay, balanced state, duplicate suppression, and transient-failure retries | `TestR1TenThousandProductionHTTPRequests`; 10,000 logical submissions, 200 duplicate bodies/keys, 9,800 unique effects, 503/429/timeout injection, terminal success, versions and trial balance asserted. |
 | Operational endpoints, bounded request bodies, request IDs and graceful shutdown behavior | API and `cmd/server` tests; full race suite. |
-| Domain and weighted internal coverage targets | Domain 93.7%; weighted `./internal/...` statement coverage 87.5% using `go test -p 2 ./... -race -count=1 -coverpkg=./internal/... -coverprofile=<profile>` and `go tool cover -func=<profile>` (Go 1.27.2, Windows/amd64, 2026-10-19). |
+| Domain and weighted internal coverage targets | Domain 93.7%; weighted `./internal/...` statement coverage 87.7% using `go test -p 2 ./... -race -count=1 -coverpkg=./internal/... -coverprofile=<profile>` and `go tool cover -func=<profile>` (Go 1.27.2, Windows/amd64, 2026-10-19). |
 
 ## Partial
 

@@ -54,7 +54,7 @@ The complete request, response, and status contract is [`api/openapi.yaml`](api/
 
 ## Verification and measured status
 
-On 2026-10-19, Go 1.27.2, Windows/amd64, `go test -p 2 ./... -race -count=1 -cover` passed: API 89.5%, command 94.4%, domain 93.7%, playback 76.5%, query 94.1%, repository 80.3%, serverruntime 87.5%. `go test -p 2 ./... -race -count=1 -coverpkg=./internal/... -coverprofile=<profile>` followed by `go tool cover -func=<profile>` measured weighted internal statement coverage at 87.5% (the profile path is chosen by the caller). The same revision passed `gofmt -l .` (no output), `go build ./...`, and `go vet ./...`.
+On 2026-10-19, Go 1.27.2, Windows/amd64, `go test -p 2 ./... -race -count=1 -cover` passed: API 89.5%, command 94.4%, domain 93.7%, playback 76.5%, query 94.1%, repository 80.3%, serverruntime 87.5%. `go test -p 2 ./... -race -count=1 -coverpkg=./internal/... -coverprofile=<profile>` followed by `go tool cover -func=<profile>` measured weighted internal statement coverage at 87.7% (the profile path is chosen by the caller). The same revision passed `gofmt -l .` (no output), `go build ./...`, and `go vet ./...`.
 
 `go test -p 1 ./internal/playback -run '^TestR1' -count=1 -v` exercised 10,000 submissions against the production router over loopback, including 200 identical same-key duplicates and injected transient responses/timeouts; it completed in 1.125568s with 9,800 unique effects and balanced trial-balance state. This is a bounded in-memory test, not a deployment or sustained-throughput claim. See [`openspec/dod.md`](openspec/dod.md) for Met/Partial/Unmet status and named evidence.
 
