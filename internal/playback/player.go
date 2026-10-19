@@ -5,7 +5,9 @@ import (
 	"context"
 	"errors"
 	"io"
+	"math/rand"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -32,12 +34,15 @@ type Outcome struct {
 
 // Policy controls retries. Only transport errors and HTTP 408, 429, and 5xx are retried.
 type Policy struct {
-	MaxAttempts int
-	BaseDelay   time.Duration
+	MaxAttempts    int
+	BaseDelay      time.Duration
+	MaxDelay       time.Duration
+	AttemptTimeout time.Duration
+	Concurrency    int
 }
 
 func DefaultPolicy() Policy {
-	return Policy{MaxAttempts: 3}
+	return Policy{MaxAttempts: 6, BaseDelay: 50 * time.Millisecond, MaxDelay: 2 * time.Second, AttemptTimeout: 2 * time.Second, Concurrency: 64}
 }
 
 func Retryable(status int) bool {
@@ -56,15 +61,44 @@ func Play(ctx context.Context, client *http.Client, baseURL string, calls []Call
 	if policy.MaxAttempts < 1 {
 		policy.MaxAttempts = 1
 	}
-	out := make([]Outcome, len(calls))
-	for i, call := range calls {
-		outcome, err := playOne(ctx, client, baseURL, call, policy)
-		out[i] = outcome
-		if err != nil {
-			return out, err
-		}
+	if policy.MaxAttempts > 6 {
+		policy.MaxAttempts = 6
 	}
-	return out, nil
+	if policy.Concurrency < 1 {
+		policy.Concurrency = 1
+	}
+	out := make([]Outcome, len(calls))
+	jobs := make(chan int)
+	var wg sync.WaitGroup
+	var firstErr error
+	var errMu sync.Mutex
+	workers := policy.Concurrency
+	if workers > len(calls) {
+		workers = len(calls)
+	}
+	for worker := 0; worker < workers; worker++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := range jobs {
+				outcome, err := playOne(ctx, client, baseURL, calls[i], policy)
+				out[i] = outcome
+				if err != nil {
+					errMu.Lock()
+					if firstErr == nil {
+						firstErr = err
+					}
+					errMu.Unlock()
+				}
+			}
+		}()
+	}
+	for i := range calls {
+		jobs <- i
+	}
+	close(jobs)
+	wg.Wait()
+	return out, firstErr
 }
 
 func playOne(ctx context.Context, client *http.Client, baseURL string, call Call, policy Policy) (Outcome, error) {
@@ -75,6 +109,12 @@ func playOne(ctx context.Context, client *http.Client, baseURL string, call Call
 		}
 		if attempt > 1 && policy.BaseDelay > 0 {
 			delay := policy.BaseDelay << (attempt - 2)
+			if policy.MaxDelay > 0 && delay > policy.MaxDelay {
+				delay = policy.MaxDelay
+			}
+			if delay > 1 {
+				delay = time.Duration(rand.Int63n(int64(delay) + 1))
+			}
 			timer := time.NewTimer(delay)
 			select {
 			case <-ctx.Done():
@@ -83,8 +123,14 @@ func playOne(ctx context.Context, client *http.Client, baseURL string, call Call
 			case <-timer.C:
 			}
 		}
-		req, err := http.NewRequestWithContext(ctx, call.Method, baseURL+call.Path, bytes.NewReader(call.Body))
+		attemptCtx := ctx
+		cancelAttempt := func() {}
+		if policy.AttemptTimeout > 0 {
+			attemptCtx, cancelAttempt = context.WithTimeout(ctx, policy.AttemptTimeout)
+		}
+		req, err := http.NewRequestWithContext(attemptCtx, call.Method, baseURL+call.Path, bytes.NewReader(call.Body))
 		if err != nil {
+			cancelAttempt()
 			return last, err
 		}
 		if len(call.Body) > 0 {
@@ -93,19 +139,21 @@ func playOne(ctx context.Context, client *http.Client, baseURL string, call Call
 		resp, err := client.Do(req)
 		last.Attempts = attempt
 		if err != nil {
+			cancelAttempt()
 			last.Err = err
 			last.Status = 0
-			if attempt == policy.MaxAttempts || !retryableErr(err) {
+			if attempt == policy.MaxAttempts || ctx.Err() != nil || (!retryableErr(err) && !errors.Is(err, context.DeadlineExceeded)) {
 				return last, nil
 			}
 			continue
 		}
 		body, readErr := io.ReadAll(resp.Body)
 		resp.Body.Close()
+		cancelAttempt()
 		if readErr != nil {
 			last.Err = readErr
 			last.Status = resp.StatusCode
-			if attempt == policy.MaxAttempts || !retryableErr(readErr) {
+			if attempt == policy.MaxAttempts || ctx.Err() != nil || (!retryableErr(readErr) && !errors.Is(readErr, context.DeadlineExceeded)) {
 				return last, nil
 			}
 			continue
@@ -113,7 +161,7 @@ func playOne(ctx context.Context, client *http.Client, baseURL string, call Call
 		last.Status = resp.StatusCode
 		last.Body = body
 		last.Err = nil
-		if !Retryable(resp.StatusCode) || attempt == policy.MaxAttempts {
+		if !Retryable(resp.StatusCode) || attempt == policy.MaxAttempts || ctx.Err() != nil {
 			return last, nil
 		}
 	}
