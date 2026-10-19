@@ -16,6 +16,7 @@ func TestLoadConfigValidation(t *testing.T) {
 	}{
 		{name: "defaults", env: map[string]string{}},
 		{name: "custom addr", env: map[string]string{"HTTP_ADDR": "127.0.0.1:8101"}},
+		{name: "public listener rejected", env: map[string]string{"HTTP_ADDR": "0.0.0.0:8101"}, wantErr: true},
 		{name: "invalid addr", env: map[string]string{"HTTP_ADDR": "broken"}, wantErr: true},
 		{name: "invalid database", env: map[string]string{"DATABASE_URL": "http://example.invalid/db"}, wantErr: true},
 		{name: "postgres database", env: map[string]string{"DATABASE_URL": "postgres://localhost/ledger"}},
@@ -27,6 +28,9 @@ func TestLoadConfigValidation(t *testing.T) {
 			}
 			if err == nil && cfg.addr == "" {
 				t.Fatal("address is empty")
+			}
+			if err == nil && tc.name == "defaults" && cfg.addr != "127.0.0.1:8101" {
+				t.Fatalf("default address %q", cfg.addr)
 			}
 		})
 	}

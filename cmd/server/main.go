@@ -26,10 +26,17 @@ type config struct {
 func loadConfig(getenv func(string) string) (config, error) {
 	cfg := config{addr: strings.TrimSpace(getenv("HTTP_ADDR")), databaseURL: strings.TrimSpace(getenv("DATABASE_URL"))}
 	if cfg.addr == "" {
-		cfg.addr = ":8101"
+		cfg.addr = "127.0.0.1:8101"
 	}
-	if _, _, err := net.SplitHostPort(cfg.addr); err != nil {
+	host, _, err := net.SplitHostPort(cfg.addr)
+	if err != nil {
 		return config{}, fmt.Errorf("HTTP_ADDR must be host:port: %w", err)
+	}
+	if host != "localhost" {
+		ip := net.ParseIP(host)
+		if ip == nil || !ip.IsLoopback() {
+			return config{}, errors.New("HTTP_ADDR must use a loopback host")
+		}
 	}
 	if cfg.databaseURL != "" {
 		u, err := url.Parse(cfg.databaseURL)

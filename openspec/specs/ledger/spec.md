@@ -32,6 +32,28 @@ The ledger SHALL expose reversals as new transactions referencing the original a
 ### Requirement: Queryable ledger history
 The ledger SHALL support paginated account entries, as-of account balances, trial balance, and transaction lookup by identity and idempotency key. Balance results SHALL equal the debit-minus-credit fold of applicable entries.
 
+### Requirement: Loopback-only HTTP listener
+The server SHALL bind only to loopback addresses and SHALL reject non-loopback `HTTP_ADDR` values. The default address SHALL be `127.0.0.1:8101`.
+
+#### Scenario: Reject a public bind address
+- **WHEN** `HTTP_ADDR` is configured as a wildcard or non-loopback IP
+- **THEN** configuration validation fails before listening
+
+### Requirement: Stable cursor entry pagination
+The ledger SHALL support exclusive keyset pagination ordered by `(created_at, entry_id)` and SHALL return an opaque continuation cursor when another page exists. Explicit offset pagination SHALL remain available for compatibility.
+
+#### Scenario: Continue after a later append
+- **GIVEN** a caller has received a cursor for an entry page
+- **AND** additional entries are appended after that page was read
+- **WHEN** the caller requests the next page using the cursor
+- **THEN** entries are ordered after the cursor key without repeating earlier entries
+- **AND** newly appended entries after the cursor key are visible
+
+#### Scenario: Stable timestamp ties
+- **GIVEN** multiple entries share a creation timestamp
+- **WHEN** cursor pages are read
+- **THEN** entry UUID provides a deterministic tie-break and concatenated pages match that order
+
 ### Requirement: Idempotent concurrent writes
 A write key SHALL bind to a canonical payload. Repeating the same key and payload SHALL return the original result without a second effect; reusing it with a different payload SHALL conflict. Concurrent journal writes SHALL preserve balance and account-version invariants.
 
