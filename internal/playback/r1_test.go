@@ -90,6 +90,7 @@ func TestR1TenThousandProductionHTTPRequests(t *testing.T) {
 	start := time.Now()
 	policy := DefaultPolicy()
 	policy.AttemptTimeout = time.Second
+	policy.Concurrency = 128
 	out, err := Play(ctx, client, srv.URL, calls, policy)
 	elapsed := time.Since(start)
 	if err != nil {

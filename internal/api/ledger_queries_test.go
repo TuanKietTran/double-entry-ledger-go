@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -32,8 +31,15 @@ func TestCursorPaginationContinuesAcrossConcurrentAppend(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	initial := domain.Transaction{ID: uuid.New(), IdempotencyKey: "cursor-seed", Status: "POSTED"}
+	createdAt := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
 	for i := 0; i < 3; i++ {
-		postOne(fmt.Sprintf("cursor-%d", i))
+		initial.Entries = append(initial.Entries,
+			domain.Entry{ID: uuid.New(), TransactionID: initial.ID, AccountID: a, Amount: decimal.NewFromInt(1), Direction: domain.Debit, Currency: "USD", CreatedAt: createdAt},
+			domain.Entry{ID: uuid.New(), TransactionID: initial.ID, AccountID: b, Amount: decimal.NewFromInt(1), Direction: domain.Credit, Currency: "USD", CreatedAt: createdAt})
+	}
+	if err := repo.SaveTransaction(ctx, initial); err != nil {
+		t.Fatal(err)
 	}
 	h := NewHandlersWithTransactionQueries(nil, query.NewGetBalanceHandler(repo), nil, nil, query.NewLedgerQueries(repo)).Routes()
 	fetch := func(cursor string) (*httptest.ResponseRecorder, []struct {
