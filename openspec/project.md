@@ -25,4 +25,4 @@ Accounts, transactions, reversals, entry pages, balances/as-of, trial balance, a
 
 ## Scope notes
 
-No downstream service is consumed. Durable production operations, remote-database fault recovery, hosted CI execution, exhaustive OpenAPI semantics, and sustained live-process load remain unverified or out of scope. See the DoD.
+No downstream service is consumed. Cursor continuation is keyset-based but not a snapshot: an append that sorts before the cursor can be omitted from the continuation. Durable production operations, remote-database fault recovery, hosted CI execution, exhaustive OpenAPI semantics, and sustained live-process load remain unverified or out of scope. See the DoD.

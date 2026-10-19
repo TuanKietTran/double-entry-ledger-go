@@ -12,10 +12,11 @@ The ledger SHALL support exclusive keyset pagination ordered by `(created_at, en
 
 #### Scenario: Continue after a later append
 - **GIVEN** a caller has received a cursor for an entry page
-- **AND** additional entries are appended after that page was read
+- **AND** additional entries with sort keys after the cursor are appended after that page was read
 - **WHEN** the caller requests the next page using the cursor
 - **THEN** entries are ordered after the cursor key without repeating earlier entries
-- **AND** newly appended entries after the cursor key are visible
+- **AND** newly appended entries whose sort keys follow the cursor are visible
+- **AND** an append ordered before the cursor is outside this page continuation
 
 #### Scenario: Stable timestamp ties
 - **GIVEN** multiple entries share a creation timestamp

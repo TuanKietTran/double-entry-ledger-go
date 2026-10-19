@@ -9,7 +9,6 @@ This status covers repository tests and the in-memory HTTP runtime only. No prod
 | Exact positive balanced single-currency journals, strict directions, explicit accounts | `go test -p 2 ./... -race -count=1 -cover`; domain coverage 93.7%; domain and repository invariant tests. |
 | Payload-bound idempotent posting, append-only reversal, and optimistic versions | command/API and in-memory repository tests; `TestPostgresLedger` covers replay/conflict and reversal concurrency. |
 | CQRS query routes for account, transaction, entries, balance/as-of and trial balance | API/query/repository tests in the full race suite. |
-| Stable cursor entry paging plus legacy offset compatibility | `TestCursorPaginationContinuesAcrossConcurrentAppend`, `testPostgresTimestampTiePagination`, and OpenAPI route/schema tests. |
 | R1 loopback HTTP replay, balanced state, duplicate suppression, and transient-failure retries | `TestR1TenThousandProductionHTTPRequests`; 10,000 logical submissions, 200 duplicate bodies/keys, 9,800 unique effects, 503/429/timeout injection, terminal success, versions and trial balance asserted. |
 | Operational endpoints, bounded request bodies, request IDs and graceful shutdown behavior | API and `cmd/server` tests; full race suite. |
 | Domain and weighted internal coverage targets | Domain 93.7%; weighted `./internal/...` statement coverage 87.7% using `go test -p 2 ./... -race -count=1 -coverpkg=./internal/... -coverprofile=<profile>` and `go tool cover -func=<profile>` (Go 1.27.2, Windows/amd64, 2026-10-19). |
@@ -19,6 +18,7 @@ This status covers repository tests and the in-memory HTTP runtime only. No prod
 | Requirement | Limitation |
 |---|---|
 | PostgreSQL reliability | Embedded PostgreSQL tests cover independent-connection conflicts, replay, reversals and tied/keyset pagination. Network interruption, crash recovery and exhaustive database fault behavior are unverified. |
+| Cursor entry paging | `TestCursorPaginationContinuesAcrossConcurrentAppend` proves later-key appends continue without repeats, and `testPostgresTimestampTiePagination` proves tie ordering. This is not a snapshot: an append whose `(created_at, entry_id)` sorts before the cursor is not included in later pages. |
 | OpenAPI validation | Route/status registration, response properties and representative handler bodies are tested; exhaustive OpenAPI semantic/format validation is not. |
 | CI and portability | CI workflow is authored but no hosted run is verified. Linux and Docker builds are unverified; Docker is not required for tests. |
 | Runtime operations | Health/readiness/metrics, request IDs, body limits, panic recovery and graceful shutdown are implemented. No external downstream calls exist, so a downstream retry, circuit breaker, or outbox is not applicable. |
