@@ -42,7 +42,7 @@ type Policy struct {
 }
 
 func DefaultPolicy() Policy {
-	return Policy{MaxAttempts: 6, BaseDelay: 50 * time.Millisecond, MaxDelay: 2 * time.Second, AttemptTimeout: 2 * time.Second, Concurrency: 64}
+	return Policy{MaxAttempts: 6, BaseDelay: 50 * time.Millisecond, MaxDelay: 2 * time.Second, AttemptTimeout: 2 * time.Second, Concurrency: 16}
 }
 
 func Retryable(status int) bool {
