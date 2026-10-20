@@ -1,4 +1,4 @@
-# Definition of done (evidence checkpoint 2026-10-19)
+# Definition of done
 
 This status covers repository tests and the in-memory HTTP runtime only. No production deployment, hosted CI, remote database reliability, or sustained throughput claim is made.
 
